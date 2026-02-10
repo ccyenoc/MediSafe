@@ -14,7 +14,15 @@ class MedicalBottomNav extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _navLabel("Home Page"),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HomePage()),
+              );
+            },
+            child: _navLabel("Home Page"),
+          ),
           _navLabel("Schedule"),
           
           Container(
