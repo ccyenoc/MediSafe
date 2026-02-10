@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/bottom_nav.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -15,6 +16,7 @@ class _SchedulePageState extends State<SchedulePage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: _appBar(context),
+      bottomNavigationBar: const MedicalBottomNav(),
       body: SingleChildScrollView(
         child: Column(
           children: [

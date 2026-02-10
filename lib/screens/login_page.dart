@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../colors/color.dart';
 import 'registration_page.dart';
-import 'schedule_page.dart';
+import 'home_page.dart';
 
 class LoginPage extends StatelessWidget {
   const LoginPage({super.key});
@@ -138,7 +138,14 @@ class LoginPage extends StatelessWidget {
 
               // Sign In Button
               ElevatedButton(
-                onPressed: () {},
+                onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const HomePage(),
+      ),
+    );
+  },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.royalBlue,
                   foregroundColor: Colors.white,
@@ -188,7 +195,7 @@ class LoginPage extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const SchedulePage(),
+        builder: (context) => const RegisterPage(),
       ),
     );
   },

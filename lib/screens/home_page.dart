@@ -20,17 +20,47 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController _inputController = TextEditingController();
 
   void _showAddDialog(String category) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Add $category"),
+  showDialog(
+    context: context,
+    builder: (context) => Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,       // 👈 button + cursor
+          onPrimary: Colors.white,   // 👈 text on red
+          surface: Colors.white,
+          onSurface: Colors.black,
+        ),
+      ),
+      child: AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text(
+          "Add $category",
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         content: TextField(
-          controller: _inputController, 
+          controller: _inputController,
           autofocus: true,
-          decoration: InputDecoration(hintText: "Enter $category details"),
+          cursorColor: Colors.red,
+          decoration: InputDecoration(
+            hintText: "Enter $category details",
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              "Cancel",
+              style: TextStyle(color: Colors.grey),
+            ),
+          ),
           ElevatedButton(
             onPressed: () {
               if (_inputController.text.isNotEmpty) {
@@ -38,22 +68,36 @@ class _HomePageState extends State<HomePage> {
                   if (category == "Allergy") {
                     _allergies.add(_inputController.text);
                   } else if (category == "History") {
-                    _medicalHistory.add({"name": _inputController.text, "date": "Added Today"});
+                    _medicalHistory.add({
+                      "name": _inputController.text,
+                      "date": "Added Today"
+                    });
                   } else if (category == "Dose") {
-                    _doses.add({"time": "8.00 AM", "med": _inputController.text});
+                    _doses.add({
+                      "time": "8.00 AM",
+                      "med": _inputController.text
+                    });
                   }
                 });
                 _inputController.clear();
                 Navigator.pop(context);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.royalBlue),
-            child: const Text("Add", style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text("Add"),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {

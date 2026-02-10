@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../colors/gradient.dart';
+import '../widgets/bottom_nav.dart';
 
 class MedicineInfoPage extends StatelessWidget {
   const MedicineInfoPage({super.key});
@@ -8,6 +9,7 @@ class MedicineInfoPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      bottomNavigationBar: const MedicalBottomNav(),
       body: SingleChildScrollView(
         child: Column(
           children: [

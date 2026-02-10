@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../colors/color.dart';
+import '../widgets/bottom_nav.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key});
@@ -67,6 +68,7 @@ class _ScanPageState extends State<ScanPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: const MedicalBottomNav(),
       body: _controller == null || !_controller!.value.isInitialized
           ? const Center(child: CircularProgressIndicator())
           : Stack(
