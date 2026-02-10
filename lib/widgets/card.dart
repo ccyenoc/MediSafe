@@ -3,7 +3,6 @@ import '../colors/color.dart';
 
 class CustomSectionBox extends StatelessWidget {
   final String title;
-  final bool showAdd; // Controls if the + sign appears
   final Widget child;
   final double? height;
   final VoidCallback? onAddPressed;
@@ -11,7 +10,6 @@ class CustomSectionBox extends StatelessWidget {
   const CustomSectionBox({
     super.key,
     required this.title,
-    this.showAdd = false, // Default to false
     required this.child,
     this.height,
     this.onAddPressed,
@@ -25,14 +23,6 @@ class CustomSectionBox extends StatelessWidget {
         Row(
           children: [
             Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-            if (showAdd) 
-              GestureDetector(
-                onTap: onAddPressed,
-                child: const Padding(
-                  padding: EdgeInsets.only(left: 8.0),
-                  child: Icon(Icons.add, size: 20),
-                ),
-              ),
           ],
         ),
         const SizedBox(height: 8),
@@ -98,7 +88,6 @@ class RemovableTag extends StatelessWidget {
 
 class AddTagPlaceholder extends StatelessWidget {
   final VoidCallback onTap;
-
   const AddTagPlaceholder({super.key, required this.onTap});
 
   @override

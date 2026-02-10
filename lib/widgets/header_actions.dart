@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:medisafe/screens/notification_page.dart';
+import 'package:medisafe/screens/settings_page.dart';
 import '../colors/color.dart';
 
 class HeaderActions extends StatelessWidget {
@@ -12,7 +14,10 @@ class HeaderActions extends StatelessWidget {
         // Notification Icon
         IconButton(
           onPressed: () {
-            print("Notification pressed");
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const NotificationPage()),
+            );
           },
           icon: const Icon(Icons.notifications_none, color: AppColors.white, size: 28),
           tooltip: 'Notifications',
@@ -21,7 +26,10 @@ class HeaderActions extends StatelessWidget {
         // Settings Icon
         IconButton(
           onPressed: () {
-            print("Settings pressed");
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SettingsPage()),
+            );
           },
           icon: const Icon(Icons.settings_outlined, color: AppColors.white, size: 28),
           tooltip: 'Settings',

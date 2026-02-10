@@ -11,11 +11,15 @@ class ChatbotButton extends StatelessWidget {
     return FloatingActionButton(
       onPressed: onPressed,
       backgroundColor: AppColors.white,
-      shape: const CircleBorder(side: BorderSide(color: AppColors.royalBlue)),
+      shape: const CircleBorder(side: BorderSide(color: Colors.transparent)),
       elevation: 4,
-      child: const Text(
-        "chatbot",
-        style: TextStyle(color: Colors.black, fontSize: 10),
+      child: ClipOval(
+        child: Image.asset(
+          'assets/images/chatbot_logo.png',
+          fit: BoxFit.cover, 
+          width: double.infinity,
+          height: double.infinity,
+        ),
       ),
     );
   }

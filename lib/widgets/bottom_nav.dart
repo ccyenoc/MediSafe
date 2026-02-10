@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:medisafe/screens/chatbot_page.dart';
 import 'package:medisafe/screens/home_page.dart';
 import 'package:medisafe/screens/near_me.dart';
 import 'package:medisafe/screens/scan_page.dart';
@@ -78,7 +79,10 @@ class MedicalBottomNav extends StatelessWidget {
             icon: Icons.smart_toy,
             label: "Chatbot",
             onTap: () {
-              // TODO: Navigate to Chatbot page
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChatbotPage()),
+              );
             },
           ),
 

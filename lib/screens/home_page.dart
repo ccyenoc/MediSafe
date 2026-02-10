@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:medisafe/widgets/floating_chatbot.dart';
 import '../colors/color.dart';
 import '../widgets/card.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/chatbot_button.dart';
 import '../widgets/header_actions.dart';
+import 'chatbot_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,88 +18,144 @@ class _HomePageState extends State<HomePage> {
   final List<Map<String, String>> _doses = []; 
   final List<String> _allergies = [];
   final List<Map<String, String>> _medicalHistory = [];
+  final List<String> _activeMedicine = [];
   
+  final List<Message> _sharedMessages = []; 
+  final TextEditingController _sharedController = TextEditingController();
   final TextEditingController _inputController = TextEditingController();
 
-  void _showAddDialog(String category) {
-  showDialog(
-    context: context,
-    builder: (context) => Theme(
-      data: Theme.of(context).copyWith(
-        colorScheme: const ColorScheme.light(
-          primary: Colors.red,       // 👈 button + cursor
-          onPrimary: Colors.white,   // 👈 text on red
-          surface: Colors.white,
-          onSurface: Colors.black,
-        ),
+  void _openFloatingChat() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => FloatingChatbot(
+        messages: _sharedMessages,
+        controller: _sharedController,
+        onSend: (text) {
+          setState(() {
+            _sharedMessages.add(Message(text: text, isUser: true));
+            _sharedMessages.add(Message(text: "Analyzing your medical query...", isUser: false));
+          });
+        },
       ),
-      child: AlertDialog(
-        backgroundColor: Colors.white,
-        title: Text(
-          "Add $category",
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        content: TextField(
-          controller: _inputController,
-          autofocus: true,
-          cursorColor: Colors.red,
-          decoration: InputDecoration(
-            hintText: "Enter $category details",
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Colors.red),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text(
-              "Cancel",
-              style: TextStyle(color: Colors.grey),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (_inputController.text.isNotEmpty) {
-                setState(() {
-                  if (category == "Allergy") {
-                    _allergies.add(_inputController.text);
-                  } else if (category == "History") {
-                    _medicalHistory.add({
-                      "name": _inputController.text,
-                      "date": "Added Today"
-                    });
-                  } else if (category == "Dose") {
-                    _doses.add({
-                      "time": "8.00 AM",
-                      "med": _inputController.text
-                    });
-                  }
-                });
-                _inputController.clear();
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+    );
+  }
+
+  void _showAddDialog(String category) async {
+    String selectedDateStr = "Choose Date";
+    DateTime? pickedDate;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder( 
+        builder: (context, setDialogState) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: const ColorScheme.light(
+                primary: Colors.red,
+                onPrimary: Colors.white,
+                surface: Colors.white,
+                onSurface: Colors.black,
               ),
             ),
-            child: const Text("Add"),
-          ),
-        ],
+            child: AlertDialog(
+              backgroundColor: Colors.white,
+              title: Text("Add $category", style: const TextStyle(fontWeight: FontWeight.w600)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: _inputController,
+                    autofocus: true,
+                    cursorColor: Colors.red,
+                    decoration: InputDecoration(
+                      hintText: category == "History" ? "Enter disease name" : "Enter details",
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: Colors.red),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+                  ),
+                  if (category == "History") ...[
+                    const SizedBox(height: 15),
+                    InkWell(
+                      onTap: () async {
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime(2000),
+                          lastDate: DateTime(2101),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            pickedDate = picked;
+                            selectedDateStr = "${picked.day}/${picked.month}/${picked.year}";
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 15),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(selectedDateStr, style: TextStyle(color: pickedDate == null ? Colors.grey : Colors.black)),
+                            const Icon(Icons.calendar_today, size: 18, color: Colors.red),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    _inputController.clear();
+                    Navigator.pop(context);
+                  },
+                  child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_inputController.text.isNotEmpty) {
+                      setState(() {
+                        if (category == "Allergy") {
+                          _allergies.add(_inputController.text);
+                        } else if (category == "History") {
+                          _medicalHistory.add({
+                            "name": _inputController.text,
+                            "date": selectedDateStr == "Choose Date" ? "No Date" : selectedDateStr,
+                          });
+                        } else if (category == "Dose") {
+                          _doses.add({"time": "8.00 AM", "med": _inputController.text});
+                        }
+                      });
+                      _inputController.clear();
+                      Navigator.pop(context);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text("Add"),
+                ),
+              ],
+            ),
+          );
+        }
       ),
-    ),
-  );
-}
-
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,8 +179,8 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("New User", style: TextStyle(color: AppColors.white, fontSize: 22, fontWeight: FontWeight.bold)), //
-                        Text("Age : ", style: TextStyle(color: AppColors.white)), //
+                        Text("New User", style: TextStyle(color: AppColors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text("Age : ", style: TextStyle(color: AppColors.white)),
                       ],
                     ),
                   ),
@@ -137,9 +195,8 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   CustomSectionBox(
                     title: "Upcoming Dose",
-                    showAdd: false, //
                     child: _doses.isEmpty 
-                      ? const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12))) //
+                      ? const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12))) 
                       : IntrinsicHeight(
                           child: Row(
                             children: [
@@ -161,7 +218,6 @@ class _HomePageState extends State<HomePage> {
                       Expanded(
                         child: CustomSectionBox(
                           title: "Allergies",
-                          showAdd: true, //
                           height: 220,
                           onAddPressed: () => _showAddDialog("Allergy"),
                           child: Column(
@@ -187,7 +243,6 @@ class _HomePageState extends State<HomePage> {
                       Expanded(
                         child: CustomSectionBox(
                           title: "Medical History",
-                          showAdd: true, //
                           height: 220,
                           onAddPressed: () => _showAddDialog("History"),
                           child: Column(
@@ -214,11 +269,19 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 20),
 
-                  const CustomSectionBox(
+                  CustomSectionBox(
                     title: "Active Medicine",
-                    showAdd: false, 
                     height: 150,
-                    child: Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12))), 
+                    child: _activeMedicine.isEmpty
+                      ? const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12)))
+                      : ListView(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          children: _activeMedicine.map((m) => RemovableTag(
+                            label: m,
+                            color: const Color(0xFFD1E3F8),
+                            onRemove: () => setState(() => _activeMedicine.remove(m)),
+                          )).toList(),
+                        ),
                   ),
                 ],
               ),
@@ -226,7 +289,7 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
-      floatingActionButton: ChatbotButton(onPressed: () {}),
+      floatingActionButton: ChatbotButton(onPressed: _openFloatingChat),
       bottomNavigationBar: const MedicalBottomNav(),
     );
   }
