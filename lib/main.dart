@@ -1,7 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'services/notification_service.dart';
 import 'screens/landing_page.dart';
 
-void main() {
+final NotificationService _notificationService = NotificationService();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  // Initialize Notifications
+  await _notificationService.init();
+
   runApp(const MyApp());
 }
 
@@ -14,11 +29,10 @@ class MyApp extends StatelessWidget {
       title: 'MediSafe',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        fontFamily: 'LibreBaskerville', // default font
+        fontFamily: 'LibreBaskerville',
         primarySwatch: Colors.blue,
       ),
-      home: const LandingScreen(), // set landing page here
+      home: const LandingScreen(),
     );
   }
 }
-

@@ -16,6 +16,12 @@ dependencies:
   intl: ^0.18.1
   cupertino_icons: ^1.0.8
   google_maps_flutter: ^2.14.0
+  firebase_core: ^2.27.0
+  firebase_auth: ^4.17.4
+  cloud_firestore: ^4.15.5
+  flutter_local_notifications: ^17.1.2
+  timezone: ^0.9.2
+
 
 dev_dependencies:
   flutter_test:
