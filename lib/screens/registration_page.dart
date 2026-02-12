@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:medisafe/screens/optional_info_page.dart';
 import '../colors/color.dart';
 
 class RegisterPage extends StatelessWidget {
@@ -75,16 +76,6 @@ class RegisterPage extends StatelessWidget {
 
               const SizedBox(height: 16),
 
-              // NRIC
-              _label('NRIC'),
-              _inputField(
-                hint: 'Enter your NRIC',
-                icon: Icons.badge,
-                keyboardType: TextInputType.text,
-              ),
-
-              const SizedBox(height: 16),
-
               // Password
               _label('Password'),
               _inputField(
@@ -108,7 +99,10 @@ class RegisterPage extends StatelessWidget {
               // Sign Up Button
               ElevatedButton(
                 onPressed: () {
-                  // TODO: implement registration logic
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const OptionalInfoPage()),
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.royalBlue,
