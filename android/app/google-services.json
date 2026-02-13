@@ -12,7 +12,20 @@
           "package_name": "com.example.medisafe"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "673059532182-qkp28c0ks8jcstlp13mmbeou06hllv21.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.medisafe",
+            "certificate_hash": "909386c915fbb52f9d8c989db612f8a944531f0d"
+          }
+        },
+        {
+          "client_id": "673059532182-cdnvupvqghqb77cp94n6n8c974oj1136.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBNzQUk3Tk7GtN-6zCtfaajJl17-8N8SjA"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "673059532182-cdnvupvqghqb77cp94n6n8c974oj1136.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "673059532182-t4i06bmngjfv8a9e88s9uqgfdusbaa1h.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.medisafe"
+              }
+            }
+          ]
         }
       }
     }

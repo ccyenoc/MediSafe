@@ -6,8 +6,6 @@ class NotificationPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool hasNotifications = false;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -23,9 +21,7 @@ class NotificationPage extends StatelessWidget {
         ),
         centerTitle: true,
       ),
-      body: hasNotifications 
-          ? _buildNotificationList() 
-          : _buildEmptyState(),
+      body: _buildEmptyState(),
     );
   }
 
@@ -67,33 +63,6 @@ class NotificationPage extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildNotificationList() {
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: 0, 
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFD1E3F8),
-            borderRadius: BorderRadius.circular(15),
-            border: Border.all(color: AppColors.royalBlue),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.info_outline, color: AppColors.royalBlue),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text("Notification content goes here."),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
