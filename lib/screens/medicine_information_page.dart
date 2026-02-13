@@ -3,7 +3,9 @@ import '../colors/gradient.dart';
 import '../widgets/bottom_nav.dart';
 
 class MedicineInfoPage extends StatelessWidget {
-  const MedicineInfoPage({super.key});
+  final Map<String, dynamic> medicineData;
+
+  const MedicineInfoPage({super.key, required this.medicineData});
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +24,8 @@ class MedicineInfoPage extends StatelessWidget {
             const SizedBox(height: 16),
             _recipientSection(),
             const SizedBox(height: 40),
+            if (medicineData['is_dangerous'] == true) _warningSection(),
+            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -65,6 +69,7 @@ class MedicineInfoPage extends StatelessWidget {
             child: CircleAvatar(
               radius: 56,
               backgroundColor: Colors.white,
+              // TODO: Can show medicine image here if available
             ),
           ),
         ),
@@ -78,13 +83,14 @@ class MedicineInfoPage extends StatelessWidget {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
+          children: [
             Text(
-              "Panadol",
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              medicineData['name'] ?? "Unknown Medicine",
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
             ),
-            SizedBox(width: 8),
-            CircleAvatar(
+            const SizedBox(width: 8),
+            const CircleAvatar(
               radius: 14,
               backgroundColor: Colors.white,
               child: Text("?"),
@@ -92,55 +98,60 @@ class MedicineInfoPage extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        const Text(
-          "short description",
-          style: TextStyle(fontStyle: FontStyle.italic),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            medicineData['advice'] ?? "No advice available",
+            style: const TextStyle(fontStyle: FontStyle.italic),
+            textAlign: TextAlign.center,
+          ),
         )
       ],
     );
   }
 
-// 📄 Function (no card)
-// 📄 Function (no card, wraps content)
-Widget _functionSection() {
-  return Container(
-    width: double.infinity, // ensures it takes full width
-    margin: const EdgeInsets.symmetric(horizontal: 12).copyWith(bottom: 16), // horizontal + bottom spacing
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start, // left-align text
-      children: const [
-        Text(
-          "Function",
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        SizedBox(height: 8),
-        Text(
-          "Pain relief and fever reduction",
-          style: TextStyle(fontSize: 14),
-        ),
-      ],
-    ),
-  );
-}
-
-
+  // 📄 Function
+  Widget _functionSection() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 12).copyWith(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            "Function",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            medicineData['description'] ?? "No description available",
+            style: const TextStyle(fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
 
   // ⚠️ Side effect + dosage
   Widget _sideEffectDosage() {
+    // Parse lists safely
+    final sideEffects = (medicineData['side_effects'] as List?)?.join(", ") ?? "None listed";
+    final dosage = medicineData['dosage'] ?? "Consult doctor";
+
     return Row(
       children: [
         Expanded(
           child: _sectionCard(
             title: "Side Effect",
             height: 90,
-            child: const Text("Nausea, rash"),
+            child: Text(sideEffects),
           ),
         ),
         Expanded(
           child: _sectionCard(
             title: "Dosage",
             height: 90,
-            child: const Text("500mg – 1000mg"),
+            child: Text(dosage),
           ),
         ),
       ],
@@ -149,6 +160,9 @@ Widget _functionSection() {
 
   // 👥 Recipient / Not for
   Widget _recipientSection() {
+    final recipients = (medicineData['recipient_population'] as List?) ?? [];
+    final notFor = (medicineData['not_for'] as List?) ?? [];
+
     return Row(
       children: [
         Expanded(
@@ -156,10 +170,7 @@ Widget _functionSection() {
             title: "Recipient Population",
             height: 120,
             child: Column(
-              children: [
-                _pill("Adults", Colors.blue.shade100),
-                _pill("Children", Colors.blue.shade100),
-              ],
+              children: recipients.map((e) => _pill(e.toString(), Colors.blue.shade100)).toList(),
             ),
           ),
         ),
@@ -168,10 +179,7 @@ Widget _functionSection() {
             title: "Not For These People",
             height: 120,
             child: Column(
-              children: [
-                _pill("Liver disease", Colors.red.shade300),
-                _pill("Alcohol abuse", Colors.red.shade300),
-              ],
+              children: notFor.map((e) => _pill(e.toString(), Colors.red.shade300)).toList(),
             ),
           ),
         ),
@@ -179,36 +187,60 @@ Widget _functionSection() {
     );
   }
 
+  // ❗ Warning Section
+  Widget _warningSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        border: Border.all(color: Colors.red),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.warning, color: Colors.red),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              "Important: This medicine may be controlled or have serious risks. Please consult a doctor.",
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // 🧱 Reusable card
   Widget _sectionCard({
-  required String title,
-  required double height,
-  required Widget child,
-}) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Container(
-          height: height,
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.black),
+    required String title,
+    required double height,
+    required Widget child,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Container(
+            height: height,
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.black),
+            ),
+            child: SingleChildScrollView(
+              child: child,
+            ),
           ),
-          // ✅ Make content scrollable inside the card
-          child: SingleChildScrollView(
-            child: child,
-          ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   // 💊 Pill widget
   Widget _pill(String text, Color color) {
@@ -221,8 +253,7 @@ Widget _functionSection() {
         borderRadius: BorderRadius.circular(20),
       ),
       alignment: Alignment.center,
-      child: Text(text),
+      child: Text(text, textAlign: TextAlign.center),
     );
   }
-
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../colors/color.dart';
 import '../widgets/bottom_nav.dart';
+import '../backend/gemini_service.dart';
 
 class Message {
   final String text;
@@ -15,23 +16,47 @@ class ChatbotPage extends StatefulWidget {
   State<ChatbotPage> createState() => _ChatbotPageState();
 }
 
+
+
+
+// ... (keep Message class)
+
 class _ChatbotPageState extends State<ChatbotPage> {
   final TextEditingController _messageController = TextEditingController();
-  final List<Message> _messages = []; 
+  final List<Message> _messages = [];
+  final GeminiService _geminiService = GeminiService();
+  bool _isTyping = false;
 
-  void _handleSend() {
-    if (_messageController.text.trim().isEmpty) return;
+  void _handleSend() async {
+    final text = _messageController.text.trim();
+    if (text.isEmpty) return;
 
     setState(() {
-      _messages.add(Message(text: _messageController.text, isUser: true));
-      _messageController.clear(); 
+      _messages.add(Message(text: text, isUser: true));
+      _messageController.clear();
+      _isTyping = true;
     });
 
-    Future.delayed(const Duration(seconds: 1), () {
-      setState(() {
-        _messages.add(Message(text: "I am analyzing your query...", isUser: false));
-      });
-    });
+    try {
+      final response = await _geminiService.chatWithCompanion(text);
+      if (mounted) {
+        setState(() {
+          _messages.add(Message(text: response, isUser: false));
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _messages.add(Message(text: "Error: $e", isUser: false));
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isTyping = false;
+        });
+      }
+    }
   }
 
   @override
@@ -53,8 +78,17 @@ class _ChatbotPageState extends State<ChatbotPage> {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_isTyping ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index == _messages.length) {
+                  return const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
                 final msg = _messages[index];
                 return _buildChatBubble(msg.text, msg.isUser);
               },

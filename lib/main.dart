@@ -4,10 +4,13 @@ import 'firebase_options.dart';
 import 'services/notification_service.dart';
 import 'screens/landing_page.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 final NotificationService _notificationService = NotificationService();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
 
   // Initialize Firebase
   await Firebase.initializeApp(

@@ -5,6 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../colors/color.dart';
 import '../widgets/bottom_nav.dart';
+import '../backend/vision_service.dart';
+import '../backend/gemini_service.dart';
+import 'medicine_information_page.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key});
@@ -13,11 +16,15 @@ class ScanPage extends StatefulWidget {
   State<ScanPage> createState() => _ScanPageState();
 }
 
+
+
 class _ScanPageState extends State<ScanPage> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isFlashOn = false;
-  XFile? _galleryImage;
+  bool _isScanning = false; // Add scanning state
+  final VisionService _visionService = VisionService();
+  final GeminiService _geminiService = GeminiService();
 
   @override
   void initState() {
@@ -51,11 +58,73 @@ class _ScanPageState extends State<ScanPage> {
     setState(() {});
   }
 
+  Future<void> _processImage(File imageFile) async {
+    setState(() => _isScanning = true);
+
+    try {
+      // 1. Extract Text
+      final extractedText = await _visionService.extractTextFromImage(imageFile);
+
+      if (extractedText == null || extractedText.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No text found on the image. Please try again.')),
+          );
+        }
+        return;
+      }
+
+      // 2. Analyze with Gemini
+      final medicineData = await _geminiService.analyzeMedicineText(extractedText);
+
+      if (medicineData.containsKey('error')) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(medicineData['error'])),
+          );
+        }
+        return;
+      }
+
+      // 3. Navigate to Info Page
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MedicineInfoPage(medicineData: medicineData),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isScanning = false);
+      }
+    }
+  }
+
+  Future<void> _captureImage() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    if (_isScanning) return;
+
+    try {
+      final image = await _controller!.takePicture();
+      await _processImage(File(image.path));
+    } catch (e) {
+      print(e);
+    }
+  }
+
   Future<void> _openGallery() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      setState(() => _galleryImage = image);
+      await _processImage(File(image.path));
     }
   }
 
@@ -73,26 +142,19 @@ class _ScanPageState extends State<ScanPage> {
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                // Camera or gallery background
-                _galleryImage != null
-                    ? Image.file(
-                        File(_galleryImage!.path),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      )
-                    : SizedBox(
-                        width: double.infinity,
-                        height: double.infinity,
-                        child: FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _controller!.value.previewSize!.height,
-                            height: _controller!.value.previewSize!.width,
-                            child: CameraPreview(_controller!),
-                          ),
-                        ),
-                      ),
+                // Camera Preview
+                SizedBox(
+                  width: double.infinity,
+                  height: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.cover,
+                    child: SizedBox(
+                      width: _controller!.value.previewSize!.height,
+                      height: _controller!.value.previewSize!.width,
+                      child: CameraPreview(_controller!),
+                    ),
+                  ),
+                ),
 
                 // Top AppBar
                 SafeArea(
@@ -134,6 +196,25 @@ class _ScanPageState extends State<ScanPage> {
                   ),
                 ),
 
+                // Loading Indicator Overlay
+                if (_isScanning)
+                  Container(
+                    color: Colors.black54,
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(height: 16),
+                          Text(
+                            "Analyzing Medicine...",
+                            style: TextStyle(color: Colors.white, fontSize: 18),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+
                 // Bottom controls
                 Positioned(
                   bottom: 40,
@@ -160,9 +241,7 @@ class _ScanPageState extends State<ScanPage> {
                         child: IconButton(
                           icon: const Icon(Icons.camera_alt,
                               color: AppColors.darkBlue, size: 32),
-                          onPressed: () {
-                            // TODO: implement capture
-                          },
+                          onPressed: _captureImage,
                         ),
                       ),
 
