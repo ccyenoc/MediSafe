@@ -168,126 +168,129 @@ centerTitle: false, // 👈 left aligned
 
   // 📅 WEEK SELECTOR (CLICKABLE + CALENDAR)
   Widget _weekSelector(BuildContext context) {
-    final startOfWeek =
-        selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
+  // ✅ Always calculate Monday of selected week
+  final startOfWeek =
+      selectedDate.subtract(Duration(days: selectedDate.weekday - 1));
 
-    final weekDates = List.generate(
-      5,
-      (index) => startOfWeek.add(Duration(days: index)),
-    );
+  // ✅ Generate full 7-day week (Mon → Sun)
+  final weekDates = List.generate(
+    7,
+    (index) => startOfWeek.add(Duration(days: index)),
+  );
 
-    final weekNames = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  final weekNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFF1E3F8F)),
-      ),
-      child: Row(
-        children: [
-          // DAYS
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: List.generate(5, (index) {
-                final date = weekDates[index];
-                final isSelected = _isSameDay(date, selectedDate);
+  return Container(
+    margin: const EdgeInsets.symmetric(horizontal: 16),
+    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+    decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: const Color(0xFF1E3F8F)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(7, (index) {
+              final date = weekDates[index];
+              final isSelected = _isSameDay(date, selectedDate);
 
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      selectedDate = date;
-                    });
-                  },
-                  child: Column(
-                    children: [
-                      Text(
-                        weekNames[index],
-                        style: const TextStyle(color: Colors.grey),
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    selectedDate = date;
+                  });
+                },
+                child: Column(
+                  children: [
+                    Text(
+                      weekNames[index],
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF3D6DF2)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? const Color(0xFF3D6DF2)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          date.day.toString(),
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.black,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      child: Text(
+                        date.day.toString(),
+                        style: TextStyle(
+                          color:
+                              isSelected ? Colors.white : Colors.black,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
-                );
-              }),
-            ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ),
-
-          // 📆 CALENDAR ICON (iPhone style)
-          GestureDetector(
-            onTap: () async {
-              final picked = await showDatePicker(
-  context: context,
-  initialDate: selectedDate,
-  firstDate: DateTime.now().subtract(const Duration(days: 365)),
-  lastDate: DateTime.now().add(const Duration(days: 365)),
-  builder: (context, child) {
-    return Theme(
-      data: Theme.of(context).copyWith(
-        colorScheme: const ColorScheme.light(
-          primary: Colors.red,      // header & selected date
-          onPrimary: Colors.white,  // text on header
-          onSurface: Colors.black,  // body text
         ),
-        dialogBackgroundColor: Colors.white,
-      ),
-      child: child!,
-    );
-  },
-);
 
-
-              if (picked != null) {
-                setState(() {
-                  selectedDate = picked;
-                });
-              }
-            },
-            child: Container(
-              margin: const EdgeInsets.only(left: 8),
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.shade300,
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+        // 📆 Calendar button
+        GestureDetector(
+          onTap: () async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: selectedDate,
+              firstDate:
+                  DateTime.now().subtract(const Duration(days: 365)),
+              lastDate:
+                  DateTime.now().add(const Duration(days: 365)),
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: const ColorScheme.light(
+                      primary: Colors.red,
+                      onPrimary: Colors.white,
+                      onSurface: Colors.black,
+                    ),
+                    dialogBackgroundColor: Colors.white,
                   ),
-                ],
-              ),
-              child: const Icon(
-                Icons.calendar_today,
-                color: Colors.red,
-                size: 20,
-              ),
+                  child: child!,
+                );
+              },
+            );
+
+            if (picked != null) {
+              setState(() {
+                selectedDate = picked; // ✅ This auto recalculates week
+              });
+            }
+          },
+          child: Container(
+            margin: const EdgeInsets.only(left: 8),
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade300,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.calendar_today,
+              color: Colors.red,
+              size: 20,
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   // 💊 SCHEDULE SECTION
   Widget _scheduleSection({
@@ -397,6 +400,7 @@ centerTitle: false, // 👈 left aligned
 
   void _showAddScheduleDialog() {
   final TextEditingController medicineController = TextEditingController();
+  final TextEditingController noteController = TextEditingController();
 
   DateTime selectedDialogDate = selectedDate;
   int hour = 8;
@@ -408,7 +412,9 @@ centerTitle: false, // 👈 left aligned
     context: context,
     barrierDismissible: true,
     builder: (context) {
+      String? errorMessage;
       return StatefulBuilder(
+      
         builder: (context, setDialogState) {
           return Dialog(
             backgroundColor: Colors.transparent,
@@ -491,9 +497,28 @@ centerTitle: false, // 👈 left aligned
                           value: hour.toString().padLeft(2, '0'),
                           onTap: () async {
                             final picked = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: hour, minute: minute),
-                            );
+  context: context,
+  initialTime: TimeOfDay(hour: hour, minute: minute),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,          // top header color
+          onPrimary: Colors.white,      // text on header
+          surface: Colors.white,        // dialog background
+          onSurface: Colors.black,      // clock text
+        ),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: Colors.white,
+          hourMinuteTextColor: Colors.black,
+          dayPeriodTextColor: Colors.red,
+        ),
+      ),
+      child: child!,
+    );
+  },
+);
+
 
                             if (picked != null) {
                               setDialogState(() {
@@ -539,7 +564,7 @@ centerTitle: false, // 👈 left aligned
                     const SizedBox(height: 20),
 
                     const Text("Medicine"),
-                    const SizedBox(height: 8),
+
 
                     Container(
                       height: 45,
@@ -550,13 +575,20 @@ centerTitle: false, // 👈 left aligned
                         border: Border.all(color: const Color(0xFF1E3F8F)),
                       ),
                       child: TextField(
-                        controller: medicineController,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          hintText: "Type medicine name",
-                          isCollapsed: true,
-                        ),
-                      ),
+  controller: medicineController,
+  onChanged: (value) {
+    if (errorMessage != null) {
+      setDialogState(() {
+        errorMessage = null;
+      });
+    }
+  },
+  decoration: const InputDecoration(
+    border: InputBorder.none,
+    hintText: "Type medicine name",
+    isCollapsed: true,
+  ),
+),
                     ),
 
                     const SizedBox(height: 8),
@@ -573,6 +605,27 @@ centerTitle: false, // 👈 left aligned
                     
                       ],
                     ),
+
+                     const SizedBox(height: 8),
+
+const Text("Notes"),
+const SizedBox(height: 8),
+
+Container(
+  padding: const EdgeInsets.symmetric(horizontal: 12),
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(14),
+    border: Border.all(color: const Color(0xFF1E3F8F)),
+  ),
+  child: TextField(
+    controller: noteController,
+    maxLines: 3,
+    decoration: const InputDecoration(
+      border: InputBorder.none,
+      hintText: "Add note (e.g. After meal)",
+    ),
+  ),
+),
 
 
                     Row(
@@ -592,6 +645,8 @@ centerTitle: false, // 👈 left aligned
     const Text("Repeat Daily"),
   ],
 ),
+
+
 
 // 👇 SHOW DEADLINE ONLY IF RECURRING
 if (isRecurring) ...[
@@ -647,6 +702,26 @@ if (isRecurring) ...[
   ),
 ],
 
+if (errorMessage != null) ...[
+  const SizedBox(height: 12),
+  Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: Colors.red.shade100,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Text(
+      errorMessage!,
+      style: const TextStyle(
+        color: Colors.red,
+        fontWeight: FontWeight.w500,
+      ),
+      textAlign: TextAlign.center,
+    ),
+  ),
+],
+
 
                     const SizedBox(height: 20),
 
@@ -656,9 +731,51 @@ if (isRecurring) ...[
                           backgroundColor: const Color(0xFF1E3F8F),
                           foregroundColor: Colors.white,
                         ),
+
+                        
                         onPressed: () async {
   final user = FirebaseAuth.instance.currentUser;
   if (user == null) return;
+
+  setDialogState(() {
+  errorMessage = null;
+});
+
+  // ✅ VALIDATION
+  if (medicineController.text.trim().isEmpty) {
+  setDialogState(() {
+    errorMessage = "Please enter medicine name";
+  });
+  return;
+}
+
+if (isRecurring && repeatUntil == null) {
+  setDialogState(() {
+    errorMessage = "Please select repeat end date";
+  });
+  return;
+}
+
+
+  if (selectedDialogDate == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+  const SnackBar(
+    content: Text("Please select a date."),
+    backgroundColor: Colors.red,
+    behavior: SnackBarBehavior.floating,
+    margin: EdgeInsets.only(
+      top: 100,
+      left: 20,
+      right: 20,
+    ),
+    duration: Duration(seconds: 2),
+  ),
+);
+    return;
+  }
+
+  // Time is always selected because you default hour=8 minute=0
+  // so no need to validate unless you remove defaults.
 
   int finalHour = hour;
   if (period == "PM" && hour != 12) finalHour += 12;
@@ -682,7 +799,7 @@ if (isRecurring) ...[
     await schedulesRef.add({
       'medicineName': medicineController.text.trim(),
       'time': Timestamp.fromDate(firstScheduleDate),
-      'notes': "",
+      'notes': noteController.text.trim(),
       'isActive': true,
       'isTaken': false,
       'isRecurring': false,
@@ -692,7 +809,22 @@ if (isRecurring) ...[
 
   // 🔵 RECURRING DAILY
   else {
-    if (repeatUntil == null) return;
+    if (repeatUntil == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+  const SnackBar(
+    content: Text("Please select repeat end date."),
+    backgroundColor: Colors.red,
+    behavior: SnackBarBehavior.floating,
+    margin: EdgeInsets.only(
+      top: 100,
+      left: 20,
+      right: 20,
+    ),
+    duration: Duration(seconds: 2),
+  ),
+);
+      return;
+    }
 
     DateTime currentDate = firstScheduleDate;
 
@@ -700,7 +832,7 @@ if (isRecurring) ...[
       await schedulesRef.add({
         'medicineName': medicineController.text.trim(),
         'time': Timestamp.fromDate(currentDate),
-        'notes': "",
+        'notes': noteController.text.trim(),
         'isActive': true,
         'isTaken': false,
         'isRecurring': true,
@@ -712,7 +844,22 @@ if (isRecurring) ...[
   }
 
   Navigator.pop(context);
+
+  ScaffoldMessenger.of(context).showSnackBar(
+  const SnackBar(
+    content: Text("Schedule added successfully!"),
+    backgroundColor: Colors.green,
+    behavior: SnackBarBehavior.floating,
+    margin: EdgeInsets.only(
+      top: 100,
+      left: 20,
+      right: 20,
+    ),
+    duration: Duration(seconds: 2),
+  ),
+);
 },
+
 
                         child: const Text("Submit"),
                       ),
@@ -830,64 +977,170 @@ Widget _scheduleSectionFromData(
   List<QueryDocumentSnapshot> schedules,
   Color pillColor,
 ) {
+  if (schedules.isEmpty) {
   return Padding(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: const TextStyle(fontSize: 20)),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
 
         Container(
-          height: 150,
-          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
             border: Border.all(color: const Color(0xFF1E3F8F)),
+            borderRadius: BorderRadius.circular(22),
           ),
-          child: schedules.isEmpty
-              ? const Center(child: Text("No Schedule"))
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
 
-                    /// 🔵 LEFT SIDE
-                    Expanded(
-                      child: Column(
+                  /// LEFT SIDE
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "-",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(height: 20),
+                        Center(
+                          child: Text(
+                            "No Schedule",
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  /// VERTICAL DIVIDER
+                  Container(
+                    width: 1,
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    color: Colors.grey.shade400,
+                  ),
+
+                  /// NOTES BOX
+                  Container(
+                    width: 110,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: pillColor.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: const Color(0xFF1E3F8F),
+                      ),
+                    ),
+                    child: const Column(
+                      children: [
+                        Text(
+                          "Notes",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          "-",
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+
+  /// 🔵 GROUP BY TIME
+  Map<String, List<QueryDocumentSnapshot>> grouped = {};
+
+  for (var doc in schedules) {
+    final timestamp = doc['time'] as Timestamp;
+    final dateTime = timestamp.toDate();
+
+    final hour = dateTime.hour > 12
+        ? dateTime.hour - 12
+        : dateTime.hour == 0
+            ? 12
+            : dateTime.hour;
+
+    final minute =
+        dateTime.minute.toString().padLeft(2, '0');
+
+    final period =
+        dateTime.hour >= 12 ? "PM" : "AM";
+
+    final timeKey = "$hour.$minute $period";
+
+    grouped.putIfAbsent(timeKey, () => []);
+    grouped[timeKey]!.add(doc);
+  }
+  
+
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 20)),
+        const SizedBox(height: 12),
+
+        /// 🔵 SCROLLABLE AREA
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFF1E3F8F)),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Column(
+            children: grouped.entries.map((entry) {
+  final time = entry.key;
+  final docs = entry.value;
+
+  // ✅ FIX: compute combinedNotes here
+  final combinedNotes = docs
+      .map((d) => (d.data() as Map<String, dynamic>)['notes'] ?? '')
+      .map((note) => note.toString().trim())
+      .where((note) => note.isNotEmpty)
+      .join('\n');
+
+  return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: IntrinsicHeight(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          /// TIME (use first schedule time)
-                          Builder(
-                            builder: (_) {
-                              final timestamp =
-                                  schedules.first['time'] as Timestamp;
-                              final dateTime = timestamp.toDate();
 
-                              final hour = dateTime.hour > 12
-                                  ? dateTime.hour - 12
-                                  : dateTime.hour;
-
-                              final minute = dateTime.minute
-                                  .toString()
-                                  .padLeft(2, '0');
-
-                              final period =
-                                  dateTime.hour >= 12 ? "PM" : "AM";
-
-                              return Text(
-                                "$hour.$minute $period",
-                                style: const TextStyle(fontSize: 16),
-                              );
-                            },
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          /// PILLS
+                          /// LEFT SIDE
                           Expanded(
-                            child: SingleChildScrollView(
-                              child: Column(
-                                children: schedules.map((doc) {
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  time,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+
+                                ...docs.map((doc) {
                                   return Container(
                                     height: 32,
                                     margin:
@@ -900,60 +1153,81 @@ Widget _scheduleSectionFromData(
                                       borderRadius:
                                           BorderRadius.circular(20),
                                       border: Border.all(
-                                          color:
-                                              const Color(0xFF1E3F8F)),
+                                        color:
+                                            const Color(0xFF1E3F8F),
+                                      ),
                                     ),
-                                    child:
-                                        Text(doc['medicineName']),
+                                    child: Text(
+                                      doc['medicineName'],
+                                    ),
                                   );
-                                }).toList(),
-                              ),
+                                }),
+                              ],
+                            ),
+                          ),
+
+                          /// 🔵 VERTICAL DIVIDER
+                          Container(
+                            width: 1,
+                            margin:
+                                const EdgeInsets.symmetric(horizontal: 12),
+                            color: Colors.grey.shade400,
+                          ),
+
+                          /// 🔵 NOTES (MATCH HEIGHT)
+                          Container(
+                            width: 110,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color:
+                                  pillColor.withOpacity(0.3),
+                              borderRadius:
+                                  BorderRadius.circular(16),
+                              border: Border.all(
+                                  color: const Color(0xFF1E3F8F)),
+                            ),
+                            child: Column(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  "Notes",
+                                  style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold),
+                                ),
+                                const SizedBox(height: 8),
+                                
+Text(
+  combinedNotes.isEmpty ? "No notes" : combinedNotes,
+  textAlign: TextAlign.center,
+),
+
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
+                  ),
 
-                    /// 🔵 VERTICAL DIVIDER
-                    Container(
-                      width: 1,
-                      margin:
-                          const EdgeInsets.symmetric(horizontal: 12),
-                      color: const Color(0xFF1E3F8F),
+                  /// 🔵 GREY LINE BETWEEN TIMES
+                  if (entry.key != grouped.keys.last)
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: Colors.grey.shade300,
                     ),
-
-                    /// 🔵 NOTES BLOCK (ALWAYS VISIBLE)
-                    Container(
-                      width: 110,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: pillColor.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                            color: const Color(0xFF1E3F8F)),
-                      ),
-                      child: Column(
-                        children: [
-                          const Text(
-                            "Notes",
-                            style:
-                                TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            schedules.first['notes'] ?? "No notes",
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                ],
+              );
+            }).toList(),
+          ),
         ),
       ],
     ),
   );
 }
+
 
 Widget _medicinePill(String name, Color color) {
   return Container(
