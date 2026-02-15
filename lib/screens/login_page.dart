@@ -8,7 +8,6 @@ import 'package:firebase_core/firebase_core.dart';
 
 class LoginPage extends StatefulWidget {
 
-
   const LoginPage({super.key});
 
   @override
@@ -24,12 +23,27 @@ class _LoginPageState extends State<LoginPage> {
 // push to homepage if success
   Future<void> signInWithEmail() async {
   try {
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
+    final userCredential =
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
       email: emailController.text.trim(),
       password: passwordController.text.trim(),
     );
 
+    final user = userCredential.user;
+
     if (!mounted) return;
+
+    if (user != null && !user.emailVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please verify your email before logging in."),
+        ),
+      );
+
+      // Optional: resend verification
+      await user.sendEmailVerification();
+      return;
+    }
 
     Navigator.pushReplacement(
       context,
@@ -41,7 +55,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
 
 // method for google sign in
   Future<void> signInWithGoogle() async {
@@ -192,7 +205,32 @@ class _LoginPageState extends State<LoginPage> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: () async {
+  if (emailController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please enter your email first"),
+      ),
+    );
+    return;
+  }
+
+  try {
+    await FirebaseAuth.instance.sendPasswordResetEmail(
+      email: emailController.text.trim(),
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Password reset email sent"),
+      ),
+    );
+  } on FirebaseAuthException catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message ?? "Error occurred")),
+    );
+  }
+},
                   child: const Text(
                     'Forgot Password?',
                     style: TextStyle(

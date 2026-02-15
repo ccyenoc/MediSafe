@@ -16,6 +16,8 @@ class MedicineInfoPage extends StatelessWidget {
             _header(context),
             const SizedBox(height: 70),
             _titleSection(),
+            const SizedBox(height: 16),
+            _addScheduleButton(context),
             const SizedBox(height: 24),
             _functionSection(),
             _sideEffectDosage(),
@@ -27,6 +29,249 @@ class MedicineInfoPage extends StatelessWidget {
       ),
     );
   }
+
+  Widget _addScheduleButton(BuildContext context) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 24),
+    child: SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF1E3F8F),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+        onPressed: () {
+          _showAddScheduleDialog(context);
+        },
+        icon: const Icon(Icons.add),
+        label: const Text("Add To Schedule"),
+      ),
+    ),
+  );
+}
+
+void _showAddScheduleDialog(BuildContext context) {
+  final TextEditingController medicineController =
+      TextEditingController(text: "Panadol"); // 🔥 Auto-filled
+
+  DateTime selectedDate = DateTime.now();
+  int hour = 8;
+  int minute = 0;
+  String period = "AM";
+
+  showDialog(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(22),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                    const Text(
+                      "Add Schedule",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    const Text("Select Date"),
+                    const SizedBox(height: 8),
+
+                    GestureDetector(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime.now()
+                              .subtract(const Duration(days: 365)),
+                          lastDate: DateTime.now()
+                              .add(const Duration(days: 365)),
+                        );
+
+                        if (picked != null) {
+                          setStateDialog(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        height: 45,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                        alignment: Alignment.centerLeft,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                              color: const Color(0xFF1E3F8F)),
+                        ),
+                        child: Text(
+                          "${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    const Text("Time"),
+                    const SizedBox(height: 8),
+
+                    Row(
+                      mainAxisAlignment:
+                          MainAxisAlignment.spaceBetween,
+                      children: [
+
+                        _timeBox(
+                          value: hour.toString().padLeft(2, '0'),
+                          onTap: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay(
+                                  hour: hour, minute: minute),
+                            );
+
+                            if (picked != null) {
+                              setStateDialog(() {
+                                hour = picked.hourOfPeriod == 0
+                                    ? 12
+                                    : picked.hourOfPeriod;
+                                minute = picked.minute;
+                                period = picked.period ==
+                                        DayPeriod.am
+                                    ? "AM"
+                                    : "PM";
+                              });
+                            }
+                          },
+                        ),
+
+                        const Text(":"),
+
+                        _timeBox(
+                          value:
+                              minute.toString().padLeft(2, '0'),
+                          onTap: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay(
+                                  hour: hour, minute: minute),
+                            );
+
+                            if (picked != null) {
+                              setStateDialog(() {
+                                hour = picked.hourOfPeriod == 0
+                                    ? 12
+                                    : picked.hourOfPeriod;
+                                minute = picked.minute;
+                                period = picked.period ==
+                                        DayPeriod.am
+                                    ? "AM"
+                                    : "PM";
+                              });
+                            }
+                          },
+                        ),
+
+                        _timeBox(
+                          value: period,
+                          onTap: () {
+                            setStateDialog(() {
+                              period =
+                                  period == "AM" ? "PM" : "AM";
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    const Text("Medicine"),
+                    const SizedBox(height: 8),
+
+                    Container(
+                      height: 45,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 12),
+                      alignment: Alignment.centerLeft,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: const Color(0xFF1E3F8F)),
+                      ),
+                      child: TextField(
+                        controller: medicineController,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          isCollapsed: true,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+
+                    Center(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                              const Color(0xFF1E3F8F),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () {
+                          // 🔥 You can connect this to Firestore later
+                          Navigator.pop(context);
+                        },
+                        child: const Text("Submit"),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+Widget _timeBox({
+  required String value,
+  required VoidCallback onTap,
+}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 60,
+      height: 45,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF1E3F8F)),
+      ),
+      child: Text(
+        value,
+        style: const TextStyle(fontSize: 16),
+      ),
+    ),
+  );
+}
+
 
   // 🔵 Header
   Widget _header(BuildContext context) {
