@@ -2,9 +2,90 @@ import 'package:flutter/material.dart';
 import '../colors/color.dart';
 import 'registration_page.dart';
 import 'home_page.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_core/firebase_core.dart';
 
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
+
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
+// method for menual email sign in
+// push to homepage if success
+  Future<void> signInWithEmail() async {
+  try {
+    final userCredential =
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: emailController.text.trim(),
+      password: passwordController.text.trim(),
+    );
+
+    final user = userCredential.user;
+
+    if (!mounted) return;
+
+    if (user != null && !user.emailVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please verify your email before logging in."),
+        ),
+      );
+
+      // Optional: resend verification
+      await user.sendEmailVerification();
+      return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const HomePage()),
+    );
+  } on FirebaseAuthException catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message ?? "Login failed")),
+    );
+  }
+}
+
+// method for google sign in
+  Future<void> signInWithGoogle() async {
+  try {
+    final GoogleSignInAccount? googleUser =
+        await GoogleSignIn().signIn();
+
+    if (googleUser == null) return;
+
+    final GoogleSignInAuthentication googleAuth =
+        await googleUser.authentication;
+
+    final credential = GoogleAuthProvider.credential(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
+
+    await FirebaseAuth.instance.signInWithCredential(credential);
+
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const HomePage(),
+      ),
+    );
+  } catch (e) {
+    print("Google Sign-In Error: $e");
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +162,7 @@ class LoginPage extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               TextField(
+                controller: emailController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                   filled: true,
@@ -103,6 +185,7 @@ class LoginPage extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               TextField(
+                controller: passwordController,
                 obscureText: true,
                 decoration: InputDecoration(
                   filled: true,
@@ -122,7 +205,32 @@ class LoginPage extends StatelessWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: () {},
+                  onPressed: () async {
+  if (emailController.text.trim().isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please enter your email first"),
+      ),
+    );
+    return;
+  }
+
+  try {
+    await FirebaseAuth.instance.sendPasswordResetEmail(
+      email: emailController.text.trim(),
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Password reset email sent"),
+      ),
+    );
+  } on FirebaseAuthException catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(e.message ?? "Error occurred")),
+    );
+  }
+},
                   child: const Text(
                     'Forgot Password?',
                     style: TextStyle(
@@ -138,14 +246,9 @@ class LoginPage extends StatelessWidget {
 
               // Sign In Button
               ElevatedButton(
-                onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const HomePage(),
-      ),
-    );
-  },
+                onPressed: () async {
+                 await signInWithEmail();
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.royalBlue,
                   foregroundColor: Colors.white,
@@ -164,7 +267,9 @@ class LoginPage extends StatelessWidget {
 
               // Google Sign In
               OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () async {
+                  await signInWithGoogle();
+                },
                 icon: Image.asset(
                   'assets/images/google_logo.png',
                   height: 22,

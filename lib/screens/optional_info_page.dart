@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:medisafe/screens/home_page.dart';
 import '../colors/color.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class OptionalInfoPage extends StatefulWidget {
   const OptionalInfoPage({super.key});
@@ -19,13 +21,26 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
   final TextEditingController _allergyController = TextEditingController();
   final TextEditingController _historyController = TextEditingController();
 
-  void _navigateToHome() {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
-      (route) => false,
-    );
+  Future<void> _navigateToHome({bool saveData = true}) async {
+  final user = FirebaseAuth.instance.currentUser;
+
+  if (user != null && saveData) {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .update({
+      'allergies': _hasNoAllergies ? [] : _allergies,
+      'medicalHistory': _hasNoHistory ? [] : _medicalHistory,
+    });
   }
+
+  Navigator.pushAndRemoveUntil(
+    context,
+    MaterialPageRoute(builder: (context) => const HomePage()),
+    (route) => false,
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -111,9 +126,20 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
 
             const SizedBox(height: 40),
 
-            _buildPrimaryButton("Save and Continue", AppColors.royalBlue, Colors.white, _navigateToHome),
+            _buildPrimaryButton(
+             "Save and Continue",
+           AppColors.royalBlue,
+           Colors.white,
+             () => _navigateToHome(saveData: true),
+            ),
             const SizedBox(height: 15),
-            _buildPrimaryButton("Skip for now", Colors.white, AppColors.royalBlue, _navigateToHome, isBordered: true),
+            _buildPrimaryButton(
+             "Skip for now",
+           Colors.white,
+           AppColors.royalBlue,
+             () => _navigateToHome(saveData: false),
+             isBordered: true,
+          ),
             const SizedBox(height: 30),
           ],
         ),

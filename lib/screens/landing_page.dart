@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../colors/gradient.dart';
 import 'login_page.dart'; // import login page
+import 'package:firebase_auth/firebase_auth.dart';
+import 'home_page.dart';
 
 class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
@@ -11,17 +13,39 @@ class LandingScreen extends StatefulWidget {
 
 class _LandingScreenState extends State<LandingScreen> {
   @override
-  void initState() {
-    super.initState();
+void initState() {
+  super.initState();
 
-    // Navigate to LoginPage after 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
+  Future.delayed(const Duration(seconds: 3), () async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (!mounted) return;
+
+    if (user != null) {
+      // Optional: check email verification
+      await user.reload();
+      final refreshedUser = FirebaseAuth.instance.currentUser;
+
+      if (refreshedUser!.emailVerified) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginPage()),
+        );
+      }
+    } else {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const LoginPage()),
       );
-    });
-  }
+    }
+  });
+}
+
 
   @override
   Widget build(BuildContext context) {
