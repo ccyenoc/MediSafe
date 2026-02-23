@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../colors/color.dart';
+import '../services/ocr_service.dart';
+import '../services/gemini_service.dart';
 import '../widgets/bottom_nav.dart';
+import 'medicine_information_page.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key});
@@ -18,6 +21,10 @@ class _ScanPageState extends State<ScanPage> {
   List<CameraDescription>? _cameras;
   bool _isFlashOn = false;
   XFile? _galleryImage;
+  bool _isProcessing = false;
+
+  final _ocrService = OcrService();
+  final _geminiService = GeminiService();
 
   @override
   void initState() {
@@ -43,7 +50,6 @@ class _ScanPageState extends State<ScanPage> {
 
   Future<void> _toggleFlash() async {
     if (_controller == null) return;
-
     _isFlashOn = !_isFlashOn;
     await _controller!.setFlashMode(
       _isFlashOn ? FlashMode.torch : FlashMode.off,
@@ -56,7 +62,58 @@ class _ScanPageState extends State<ScanPage> {
     final image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       setState(() => _galleryImage = image);
+      await _processImage(image.path);
     }
+  }
+
+  /// Core pipeline: OCR → Gemini → Navigate to result page
+  Future<void> _processImage(String imagePath) async {
+    setState(() => _isProcessing = true);
+    try {
+      // 1. On-device OCR via ML Kit
+      final ocrText = await _ocrService.extractText(imagePath);
+
+      print("========== RAW OCR TEXT START ==========\n$ocrText\n========== RAW OCR TEXT END ==========");
+      if (ocrText.trim().isEmpty) {
+        _showError('No text found. Make sure the medicine name/label is clearly visible and well-lit.');
+        return;
+      }
+
+      // 2. Identify medicine via Gemini (with user profile context)
+      final medicine = await _geminiService.identifyMedicine(ocrText);
+
+      // 3. Navigate to result page
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MedicineInfoPage(medicine: medicine),
+          ),
+        );
+      }
+    } catch (e) {
+      _showError('Could not identify medicine: ${e.toString().substring(0, e.toString().length > 120 ? 120 : e.toString().length)}');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _capturePhoto() async {
+    if (_controller == null || !_controller!.value.isInitialized) return;
+    final photo = await _controller!.takePicture();
+    await _processImage(photo.path);
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
   }
 
   @override
@@ -99,14 +156,12 @@ class _ScanPageState extends State<ScanPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     height: 80,
-                    color: AppColors.darkBlue, 
+                    color: AppColors.darkBlue,
                     child: Row(
                       children: [
                         IconButton(
                           icon: const Icon(Icons.arrow_back, color: Colors.white),
-                          onPressed: () {
-                            Navigator.pop(context); // go back to previous page
-                          },
+                          onPressed: () => Navigator.pop(context),
                         ),
                         const SizedBox(width: 16),
                         const Text(
@@ -122,7 +177,7 @@ class _ScanPageState extends State<ScanPage> {
                   ),
                 ),
 
-                // Scanner overlay (center square)
+                // Scanner overlay box
                 Center(
                   child: Container(
                     width: 250,
@@ -134,6 +189,25 @@ class _ScanPageState extends State<ScanPage> {
                   ),
                 ),
 
+                // Processing overlay
+                if (_isProcessing)
+                  Container(
+                    color: Colors.black54,
+                    child: const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: Colors.white),
+                          SizedBox(height: 16),
+                          Text(
+                            'Identifying medicine...',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                 // Bottom controls
                 Positioned(
                   bottom: 40,
@@ -144,36 +218,36 @@ class _ScanPageState extends State<ScanPage> {
                     children: [
                       // Gallery button
                       IconButton(
-                        icon:
-                            const Icon(Icons.photo, color: Colors.white, size: 30),
-                        onPressed: _openGallery,
+                        icon: const Icon(Icons.photo, color: Colors.white, size: 30),
+                        onPressed: _isProcessing ? null : _openGallery,
                       ),
 
-                      // Camera button (round)
-                      Container(
-                        width: 70,
-                        height: 70,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.camera_alt,
-                              color: AppColors.darkBlue, size: 32),
-                          onPressed: () {
-                            // TODO: implement capture
-                          },
+                      // Capture button
+                      GestureDetector(
+                        onTap: _isProcessing ? null : _capturePhoto,
+                        child: Container(
+                          width: 70,
+                          height: 70,
+                          decoration: BoxDecoration(
+                            color: _isProcessing ? Colors.grey : Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.camera_alt,
+                            color: _isProcessing ? Colors.white : AppColors.darkBlue,
+                            size: 32,
+                          ),
                         ),
                       ),
 
-                      // Torch button
+                      // Flash button
                       IconButton(
                         icon: Icon(
                           _isFlashOn ? Icons.flash_on : Icons.flash_off,
                           color: Colors.white,
                           size: 30,
                         ),
-                        onPressed: _toggleFlash,
+                        onPressed: _isProcessing ? null : _toggleFlash,
                       ),
                     ],
                   ),
@@ -183,4 +257,3 @@ class _ScanPageState extends State<ScanPage> {
     );
   }
 }
-

@@ -16,6 +16,7 @@ class RegisterPage extends StatefulWidget {
 class _RegisterPageState extends State<RegisterPage> {
 
   final TextEditingController usernameController = TextEditingController();
+  final TextEditingController ageController = TextEditingController();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController = TextEditingController();
@@ -32,11 +33,12 @@ class _RegisterPageState extends State<RegisterPage> {
     String password = passwordController.text.trim();
     String confirmPassword = confirmPasswordController.text.trim();
     String username = usernameController.text.trim();
+    String age = ageController.text.trim();
 
     if (email.isEmpty ||
         password.isEmpty ||
         confirmPassword.isEmpty ||
-        username.isEmpty) {
+        username.isEmpty || age.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all fields")),
       );
@@ -75,7 +77,16 @@ class _RegisterPageState extends State<RegisterPage> {
         .set({
       'username': username,
       'email': email,
+      'age': int.tryParse(age) ?? 0,
       'createdAt': FieldValue.serverTimestamp(),
+      'allergies': [],
+      'medical_history': [],
+      'location': {
+        'city': '',
+        'country': '',
+        'lat': null,
+        'lng': null,
+      },
     });
 
     // ✅ Send verification email
@@ -154,6 +165,16 @@ class _RegisterPageState extends State<RegisterPage> {
                 controller: usernameController,
                 hint: 'Enter your username',
                 icon: Icons.person,
+              ),
+
+              const SizedBox(height: 16),
+
+              _label('Age'),
+              _inputField(
+                controller: ageController,
+                hint: 'Enter your age',
+                icon: Icons.calendar_today,
+                keyboardType: TextInputType.number,
               ),
 
               const SizedBox(height: 16),

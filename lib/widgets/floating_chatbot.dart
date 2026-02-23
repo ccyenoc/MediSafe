@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:medisafe/screens/chatbot_page.dart';
 import '../colors/color.dart';
+import '../services/gemini_service.dart';
 
 class FloatingChatbot extends StatefulWidget {
   final List<Message> messages;
   final TextEditingController controller;
-  final Function(String) onSend;
+  final GeminiService geminiService;
 
   const FloatingChatbot({
-    super.key, 
-    required this.messages, 
-    required this.controller, 
-    required this.onSend
+    super.key,
+    required this.messages,
+    required this.controller,
+    required this.geminiService,
   });
 
   @override
@@ -19,11 +20,30 @@ class FloatingChatbot extends StatefulWidget {
 }
 
 class _FloatingChatbotState extends State<FloatingChatbot> {
-  void _sendMessage() {
-    if (widget.controller.text.trim().isNotEmpty) {
-      widget.onSend(widget.controller.text);
+  bool _isTyping = false;
+
+  Future<void> _sendMessage() async {
+    final text = widget.controller.text.trim();
+    if (text.isEmpty) return;
+
+    setState(() {
+      widget.messages.add(Message(text: text, isUser: true));
+      _isTyping = true;
       widget.controller.clear();
-      setState(() {}); 
+    });
+
+    try {
+      final reply = await widget.geminiService.sendMessage(text);
+      if (mounted) {
+        setState(() => widget.messages.add(Message(text: reply, isUser: false)));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => widget.messages.add(
+            Message(text: "Sorry, I couldn't process that.", isUser: false)));
+      }
+    } finally {
+      if (mounted) setState(() => _isTyping = false);
     }
   }
 
@@ -50,31 +70,42 @@ class _FloatingChatbotState extends State<FloatingChatbot> {
                 ),
               ),
             ),
-
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: widget.messages.length,
-                itemBuilder: (context, index) {
-                  final msg = widget.messages[index];
-                  return _buildChatBubble(msg.text, msg.isUser);
-                },
+              child: Stack(
+                children: [
+                  ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: widget.messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = widget.messages[index];
+                      return _buildChatBubble(msg.text, msg.isUser);
+                    },
+                  ),
+                  if (widget.messages.isEmpty) _buildWelcomeBubble(),
+                  if (_isTyping) _buildTypingIndicator(),
+                ],
               ),
             ),
-
-            if (widget.messages.isEmpty) _buildWelcomeBubble(),
-
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: TextField(
                 controller: widget.controller,
-                onSubmitted: (_) => _sendMessage(), 
+                onSubmitted: (_) => _sendMessage(),
                 decoration: InputDecoration(
                   hintText: "Ask MediSafe...",
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.send, color: AppColors.royalBlue),
-                    onPressed: _sendMessage,
-                  ),
+                  suffixIcon: _isTyping
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : IconButton(
+                          icon: const Icon(Icons.send, color: AppColors.royalBlue),
+                          onPressed: _sendMessage,
+                        ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30),
                     borderSide: const BorderSide(color: AppColors.royalBlue),
@@ -99,7 +130,7 @@ class _FloatingChatbotState extends State<FloatingChatbot> {
         margin: const EdgeInsets.symmetric(vertical: 5),
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          color: isUser ?  AppColors.red50: AppColors.royalBlue,
+          color: isUser ? AppColors.red50 : AppColors.royalBlue,
           borderRadius: BorderRadius.circular(15),
         ),
         child: Text(text, style: const TextStyle(color: Colors.white)),
@@ -107,17 +138,42 @@ class _FloatingChatbotState extends State<FloatingChatbot> {
     );
   }
 
+  Widget _buildTypingIndicator() {
+    return Align(
+      alignment: Alignment.bottomLeft,
+      child: Container(
+        margin: const EdgeInsets.only(left: 16, bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: const BoxDecoration(
+          color: AppColors.royalBlue,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(15),
+            topRight: Radius.circular(15),
+            bottomRight: Radius.circular(15),
+          ),
+        ),
+        child: const Text("MediSafe is thinking...",
+            style: TextStyle(color: Colors.white, fontSize: 12)),
+      ),
+    );
+  }
+
   Widget _buildWelcomeBubble() {
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: Alignment.topLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         padding: const EdgeInsets.all(15),
         decoration: const BoxDecoration(
           color: AppColors.royalBlue,
-          borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20), bottomRight: Radius.circular(20)),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomRight: Radius.circular(20),
+          ),
         ),
-        child: const Text("Hi, I am MediSafe. Your\nMedicine Companion.", style: TextStyle(color: Colors.white)),
+        child: const Text("Hi, I am MediSafe. Your\nMedicine Companion.",
+            style: TextStyle(color: Colors.white)),
       ),
     );
   }

@@ -21,7 +21,16 @@ class AuthService {
     await _firestore.collection('users').doc(uid).set({
       'email': email,
       'username': username,
+      'age': 0,
       'created_at': Timestamp.now(),
+      'allergies': [],
+      'medical_history': [],
+      'location': {
+        'city': '',
+        'country': '',
+        'lat': null,
+        'lng': null,
+      },
     });
   }
 }

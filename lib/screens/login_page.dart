@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import '../colors/color.dart';
 import 'registration_page.dart';
 import 'home_page.dart';
+import 'package:medisafe/screens/optional_info_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginPage extends StatefulWidget {
 
@@ -72,16 +74,45 @@ class _LoginPageState extends State<LoginPage> {
       idToken: googleAuth.idToken,
     );
 
-    await FirebaseAuth.instance.signInWithCredential(credential);
+    final userCred = await FirebaseAuth.instance.signInWithCredential(credential);
 
     if (!mounted) return;
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const HomePage(),
-      ),
-    );
+    // Check if new user or missing age
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userCred.user!.uid)
+        .get();
+
+    if (!doc.exists) {
+      // Initialize basic doc for new Google user
+      await FirebaseFirestore.instance.collection('users').doc(userCred.user!.uid).set({
+        'username': userCred.user!.displayName ?? "New User",
+        'email': userCred.user!.email ?? "",
+        'age': 0,
+        'createdAt': FieldValue.serverTimestamp(),
+        'allergies': [],
+        'medical_history': [],
+        'location': {
+          'city': '',
+          'country': '',
+          'lat': null,
+          'lng': null,
+        },
+      });
+      if (mounted) {
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const OptionalInfoPage()));
+      }
+    } else {
+      final data = doc.data()!;
+      if ((data['age'] ?? 0) == 0) {
+        // User is missing age, route to optional info
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const OptionalInfoPage()));
+      } else {
+        // Returning user with age
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
+      }
+    }
   } catch (e) {
     print("Google Sign-In Error: $e");
   }

@@ -20,18 +20,24 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
 
   final TextEditingController _allergyController = TextEditingController();
   final TextEditingController _historyController = TextEditingController();
+  final TextEditingController _ageController = TextEditingController();
+  bool _hasNoAge = false;
 
   Future<void> _navigateToHome({bool saveData = true}) async {
   final user = FirebaseAuth.instance.currentUser;
 
   if (user != null && saveData) {
+    final updateData = <String, dynamic>{
+      'allergies': _hasNoAllergies ? [] : _allergies,
+      'medical_history': _hasNoHistory ? [] : _medicalHistory,
+    };
+    if (_ageController.text.isNotEmpty) {
+      updateData['age'] = int.tryParse(_ageController.text) ?? 0;
+    }
     await FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
-        .update({
-      'allergies': _hasNoAllergies ? [] : _allergies,
-      'medicalHistory': _hasNoHistory ? [] : _medicalHistory,
-    });
+        .update(updateData);
   }
 
   Navigator.pushAndRemoveUntil(
@@ -65,6 +71,36 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
 
             _buildChatbotInfoBox(),
             const SizedBox(height: 25),
+
+            _buildSectionCard(
+              title: "What is your age?",
+              child: Column(
+                children: [
+                  if (!_hasNoAge) ...[
+                    TextField(
+                      controller: _ageController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                        hintText: "Enter your age",
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  _buildEmptyStatusLabel(
+                    "Prefer not to say", 
+                    _hasNoAge, 
+                    () => setState(() {
+                      _hasNoAge = !_hasNoAge;
+                      if (_hasNoAge) _ageController.clear(); 
+                    })
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
 
             _buildSectionCard(
               title: "Any Allergies?",

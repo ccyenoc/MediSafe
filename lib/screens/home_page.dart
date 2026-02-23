@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:medisafe/widgets/floating_chatbot.dart';
 import '../colors/color.dart';
@@ -5,6 +8,9 @@ import '../widgets/card.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/chatbot_button.dart';
 import '../widgets/header_actions.dart';
+import '../services/gemini_service.dart';
+import '../services/location_service.dart';
+import '../services/firestore_service.dart';
 import 'chatbot_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -15,14 +21,52 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<Map<String, String>> _doses = []; 
-  final List<String> _allergies = [];
-  final List<Map<String, String>> _medicalHistory = [];
+  final List<Map<String, String>> _doses = [];
+  String _username = "Loading...";
+  int _age = 0;
+  String? _profilePicBase64;
+  List<String> _allergies = [];
+  List<Map<String, String>> _medicalHistory = [];
   final List<String> _activeMedicine = [];
-  
-  final List<Message> _sharedMessages = []; 
+
+  final List<Message> _sharedMessages = [];
   final TextEditingController _sharedController = TextEditingController();
   final TextEditingController _inputController = TextEditingController();
+  late final GeminiService _floatingGeminiService;
+  final _firestoreService = FirestoreService();
+  StreamSubscription<DocumentSnapshot>? _profileSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _floatingGeminiService = GeminiService();
+    _floatingGeminiService.startChatSession();
+    LocationService().captureAndSaveLocation();
+    _listenToProfile();
+  }
+
+  void _listenToProfile() {
+    _profileSub = _firestoreService.getUserProfile().listen((doc) {
+      if (!mounted) return;
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data == null) return;
+      setState(() {
+        _username = data['username'] ?? "Unknown User";
+        _age = (data['age'] ?? 0) as int;
+        _profilePicBase64 = data['profile_pic_base64'];
+        _allergies = List<String>.from(data['allergies'] ?? []);
+        _medicalHistory = List<String>.from(data['medical_history'] ?? [])
+            .map((e) => {'name': e, 'date': ''})
+            .toList();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _profileSub?.cancel();
+    super.dispose();
+  }
 
   void _openFloatingChat() {
     showDialog(
@@ -31,12 +75,7 @@ class _HomePageState extends State<HomePage> {
       builder: (context) => FloatingChatbot(
         messages: _sharedMessages,
         controller: _sharedController,
-        onSend: (text) {
-          setState(() {
-            _sharedMessages.add(Message(text: text, isUser: true));
-            _sharedMessages.add(Message(text: "Analyzing your medical query...", isUser: false));
-          });
-        },
+        geminiService: _floatingGeminiService,
       ),
     );
   }
@@ -124,22 +163,20 @@ class _HomePageState extends State<HomePage> {
                   child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (_inputController.text.isNotEmpty) {
-                      setState(() {
-                        if (category == "Allergy") {
-                          _allergies.add(_inputController.text);
-                        } else if (category == "History") {
-                          _medicalHistory.add({
-                            "name": _inputController.text,
-                            "date": selectedDateStr == "Choose Date" ? "No Date" : selectedDateStr,
-                          });
-                        } else if (category == "Dose") {
-                          _doses.add({"time": "8.00 AM", "med": _inputController.text});
-                        }
-                      });
+                      final text = _inputController.text;
+                      if (category == "Allergy") {
+                        await _firestoreService.addAllergy(text);
+                        // stream will update _allergies automatically
+                      } else if (category == "History") {
+                        await _firestoreService.addMedicalHistory(text);
+                        // stream will update _medicalHistory automatically
+                      } else if (category == "Dose") {
+                        setState(() => _doses.add({"time": "8.00 AM", "med": text}));
+                      }
                       _inputController.clear();
-                      Navigator.pop(context);
+                      if (mounted) Navigator.pop(context);
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -157,6 +194,17 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  ImageProvider? _getAvatarImage() {
+    if (_profilePicBase64 != null && _profilePicBase64!.isNotEmpty) {
+      try {
+        return MemoryImage(base64Decode(_profilePicBase64!));
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -167,24 +215,25 @@ class _HomePageState extends State<HomePage> {
             Container(
               padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
               decoration: const BoxDecoration(color: AppColors.royalBlue),
-              child: const Row(
+              child: Row(
                 children: [
                   CircleAvatar(
                     radius: 45, 
                     backgroundColor: AppColors.white, 
-                    child: Icon(Icons.person, size: 50, color: AppColors.royalBlue)
+                    backgroundImage: _getAvatarImage(),
+                    child: _getAvatarImage() == null ? const Icon(Icons.person, size: 50, color: AppColors.royalBlue) : null,
                   ),
-                  SizedBox(width: 15),
+                  const SizedBox(width: 15),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text("New User", style: TextStyle(color: AppColors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                        Text("Age : ", style: TextStyle(color: AppColors.white)),
+                        Text(_username, style: const TextStyle(color: AppColors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                        Text("Age : ${_age > 0 ? _age : 'Unknown'}", style: const TextStyle(color: AppColors.white)),
                       ],
                     ),
                   ),
-                  HeaderActions(), 
+                  const HeaderActions(), 
                 ],
               ),
             ),
@@ -230,7 +279,7 @@ class _HomePageState extends State<HomePage> {
                                       children: _allergies.map((a) => RemovableTag(
                                         label: a, 
                                         color: AppColors.denimBlue18,
-                                        onRemove: () => setState(() => _allergies.remove(a)),
+                                        onRemove: () async { await _firestoreService.removeAllergy(a); },
                                       )).toList(),
                                     ),
                               ),
@@ -256,7 +305,7 @@ class _HomePageState extends State<HomePage> {
                                         label: h['name']!, 
                                         subLabel: h['date'],
                                         color: AppColors.babyBlue21,
-                                        onRemove: () => setState(() => _medicalHistory.remove(h)),
+                                        onRemove: () async { await _firestoreService.removeMedicalHistory(h['name']!); },
                                       )).toList(),
                                     ),
                               ),

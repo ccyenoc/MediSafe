@@ -1,12 +1,14 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:medisafe/screens/chatbot_page.dart';
 import 'package:medisafe/screens/login_page.dart';
 import 'package:medisafe/screens/near_me.dart';
 import 'package:medisafe/screens/notification_page.dart';
-import 'package:medisafe/screens/schedule_page.dart'; 
+import 'package:medisafe/screens/schedule_page.dart';
 import '../colors/color.dart';
+import '../services/firestore_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -22,7 +24,36 @@ class _SettingsPageState extends State<SettingsPage> {
   List<Map<String, String>> medicalHistory = [];
   bool _remindersEnabled = true;
   XFile? _profileImage;
+  String? _profilePicBase64;
   final ImagePicker _picker = ImagePicker();
+  final _firestoreService = FirestoreService();
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final data = await _firestoreService.getUserProfileOnce();
+      if (data != null && mounted) {
+        setState(() {
+          _username = data['username'] ?? 'New User';
+          _age = (data['age'] ?? 0).toString();
+          _profilePicBase64 = data['profile_pic_base64'];
+          allergies = List<String>.from(data['allergies'] ?? []);
+          medicalHistory = List<String>.from(data['medical_history'] ?? [])
+              .map((e) => {'name': e, 'date': ''})
+              .toList();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   Future<void> _pickImage(StateSetter setDialogState) async {
     final XFile? selected = await _picker.pickImage(source: ImageSource.gallery);
@@ -31,6 +62,19 @@ class _SettingsPageState extends State<SettingsPage> {
         _profileImage = selected;
       });
     }
+  }
+
+  ImageProvider? _getAvatarImage() {
+    if (_profileImage != null) {
+      return FileImage(File(_profileImage!.path));
+    } else if (_profilePicBase64 != null && _profilePicBase64!.isNotEmpty) {
+      try {
+        return MemoryImage(base64Decode(_profilePicBase64!));
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
   }
 
   @override
@@ -103,8 +147,8 @@ class _SettingsPageState extends State<SettingsPage> {
               CircleAvatar(
                 radius: 45, 
                 backgroundColor: Colors.white, 
-                backgroundImage: _profileImage != null ? FileImage(File(_profileImage!.path)) : null,
-                child: _profileImage == null ? const Icon(Icons.person, size: 50, color: AppColors.royalBlue) : null,
+                backgroundImage: _getAvatarImage(),
+                child: _getAvatarImage() == null ? const Icon(Icons.person, size: 50, color: AppColors.royalBlue) : null,
               ),
               Positioned(
                 bottom: 0, right: 0,
@@ -186,8 +230,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   CircleAvatar(
                     radius: 40,
                     backgroundColor: Colors.white,
-                    backgroundImage: _profileImage != null ? FileImage(File(_profileImage!.path)) : null,
-                    child: _profileImage == null ? const Icon(Icons.person, size: 40, color: Colors.grey) : null,
+                    backgroundImage: _getAvatarImage(),
+                    child: _getAvatarImage() == null ? const Icon(Icons.person, size: 40, color: Colors.grey) : null,
                   ),
                   const Text("Change profile picture", style: TextStyle(fontSize: 12)),
                   const SizedBox(height: 8),
@@ -201,9 +245,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   _dialogField("Age:", ageCtrl),
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: () {
-                      setState(() { _username = userCtrl.text; _age = ageCtrl.text; });
-                      Navigator.pop(context);
+                    onPressed: () async {
+                      setState(() { 
+                        _username = userCtrl.text; 
+                        _age = ageCtrl.text; 
+                      });
+                      
+                      String? base64Str;
+                      if (_profileImage != null) {
+                        final bytes = await File(_profileImage!.path).readAsBytes();
+                        base64Str = base64Encode(bytes);
+                        _profilePicBase64 = base64Str;
+                      }
+                      
+                      final parsedAge = int.tryParse(ageCtrl.text) ?? 0;
+                      await _firestoreService.updateProfileBasicInfo(_username, parsedAge, base64Str);
+                      if (mounted) Navigator.pop(context);
                     },
                     child: const Text("Save"),
                   )
@@ -347,12 +404,14 @@ class _SettingsPageState extends State<SettingsPage> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                ...allergies.map((a) => _listInput(a, Icons.remove, () {
+                ...allergies.map((a) => _listInput(a, Icons.remove, () async {
+                  await _firestoreService.removeAllergy(a);
                   setState(() => allergies.remove(a));
                   setDialogState(() {});
                 })),
-                _listInput("Add", Icons.add, () {
+                _listInput("Add", Icons.add, () async {
                   if (addCtrl.text.isNotEmpty) {
+                    await _firestoreService.addAllergy(addCtrl.text);
                     setState(() => allergies.add(addCtrl.text));
                     addCtrl.clear();
                     setDialogState(() {});
@@ -391,10 +450,11 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: Text(selectedDate),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (diseaseCtrl.text.isNotEmpty) {
+                      await _firestoreService.addMedicalHistory(diseaseCtrl.text);
                       setState(() => medicalHistory.add({"name": diseaseCtrl.text, "date": selectedDate}));
-                      Navigator.pop(context);
+                      if (mounted) Navigator.pop(context);
                     }
                   },
                   child: const Text("Add History"),

@@ -5,7 +5,7 @@ class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  String get uid => _auth.currentUser!.uid;
+  String get uid => _auth.currentUser?.uid ?? '';
 
   /// ==========================
   /// SCHEDULE METHODS
@@ -90,4 +90,51 @@ class FirestoreService {
   Stream<DocumentSnapshot> getUserProfile() {
     return _firestore.collection('users').doc(uid).snapshots();
   }
+
+  /// One-time profile fetch for AI use
+  Future<Map<String, dynamic>?> getUserProfileOnce() async {
+    if (uid.isEmpty) return null;
+    final doc = await _firestore.collection('users').doc(uid).get();
+    return doc.data();
+  }
+
+  /// ==========================
+  /// AGE METHOD
+  /// ==========================
+
+  Future<void> updateAge(int age) async {
+    await _firestore.collection('users').doc(uid).update({'age': age});
+  }
+
+  Future<void> updateProfileBasicInfo(String username, int age, String? base64Image) async {
+    final data = <String, dynamic>{
+      'username': username,
+      'age': age,
+    };
+    if (base64Image != null) {
+      data['profile_pic_base64'] = base64Image;
+    }
+    await _firestore.collection('users').doc(uid).update(data);
+  }
+
+  /// ==========================
+  /// LOCATION METHOD
+  /// ==========================
+
+  Future<void> updateLocation({
+    required String city,
+    required String country,
+    required double lat,
+    required double lng,
+  }) async {
+    await _firestore.collection('users').doc(uid).update({
+      'location': {
+        'city': city,
+        'country': country,
+        'lat': lat,
+        'lng': lng,
+      }
+    });
+  }
 }
+
