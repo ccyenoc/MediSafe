@@ -516,7 +516,7 @@ centerTitle: false, // 👈 left aligned
                         _timeBox(
                           value: hour.toString().padLeft(2, '0'),
                           onTap: () async {
-                            final picked = await showTimePicker(
+                           final picked = await showTimePicker(
   context: context,
   initialTime: TimeOfDay(hour: hour, minute: minute),
   builder: (context, child) {
@@ -539,7 +539,6 @@ centerTitle: false, // 👈 left aligned
   },
 );
 
-
                             if (picked != null) {
                               setDialogState(() {
                                 hour = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
@@ -556,10 +555,27 @@ centerTitle: false, // 👈 left aligned
                           value: minute.toString().padLeft(2, '0'),
                           onTap: () async {
                             final picked = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: hour, minute: minute),
-                            );
-
+  context: context,
+  initialTime: TimeOfDay(hour: hour, minute: minute),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,          // top header color
+          onPrimary: Colors.white,      // text on header
+          surface: Colors.white,        // dialog background
+          onSurface: Colors.black,      // clock text
+        ),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: Colors.white,
+          hourMinuteTextColor: Colors.black,
+          dayPeriodTextColor: Colors.red,
+        ),
+      ),
+      child: child!,
+    );
+  },
+);
                             if (picked != null) {
                               setDialogState(() {
                                 hour = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
@@ -1708,6 +1724,7 @@ class _StandaloneSmartScheduleDialogState
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      backgroundColor: Colors.white,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: ConstrainedBox(
@@ -1731,7 +1748,8 @@ class _StandaloneSmartScheduleDialogState
                 ],
               ),
               const SizedBox(height: 16),
-              Expanded(
+              Flexible(
+                fit: FlexFit.loose,
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1770,11 +1788,25 @@ class _StandaloneSmartScheduleDialogState
                       GestureDetector(
                         onTap: () async {
                           final p = await showDatePicker(
-                            context: context,
-                            initialDate: selectedDate,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
-                          );
+  context: context,
+  initialDate: selectedDate,
+  firstDate: DateTime.now(),
+  lastDate: DateTime.now().add(const Duration(days: 365)),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,        // header + selected date
+          onPrimary: Colors.white,    // header text
+          surface: Colors.white,
+          onSurface: Colors.black,
+        ),
+        dialogBackgroundColor: Colors.white,
+      ),
+      child: child!,
+    );
+  },
+);
                           if (p != null) setState(() => selectedDate = p);
                         },
                         child: _staticBox(
@@ -1787,8 +1819,32 @@ class _StandaloneSmartScheduleDialogState
                       Row(children: [
                         _chip(hour.toString().padLeft(2, '0'), () async {
                           final p = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: hour, minute: minute));
+  context: context,
+  initialTime: TimeOfDay(hour: hour, minute: minute),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,        // selected hour/minute + header
+          onPrimary: Colors.white,
+          surface: Colors.white,
+          onSurface: Colors.black,
+        ),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: Colors.white,
+          hourMinuteTextColor: Colors.black,
+          hourMinuteColor: Colors.white,
+          dayPeriodTextColor: Colors.red,
+          dayPeriodColor: Colors.white,
+          dialBackgroundColor: Colors.white,
+          dialHandColor: Colors.red,
+          dialTextColor: Colors.black,
+        ),
+      ),
+      child: child!,
+    );
+  },
+);
                           if (p != null) setState(() {
                             hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
                             minute = p.minute;
@@ -1802,8 +1858,32 @@ class _StandaloneSmartScheduleDialogState
                         ),
                         _chip(minute.toString().padLeft(2, '0'), () async {
                           final p = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: hour, minute: minute));
+  context: context,
+  initialTime: TimeOfDay(hour: hour, minute: minute),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,        // selected hour/minute + header
+          onPrimary: Colors.white,
+          surface: Colors.white,
+          onSurface: Colors.black,
+        ),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: Colors.white,
+          hourMinuteTextColor: Colors.black,
+          hourMinuteColor: Colors.white,
+          dayPeriodTextColor: Colors.red,
+          dayPeriodColor: Colors.white,
+          dialBackgroundColor: Colors.white,
+          dialHandColor: Colors.red,
+          dialTextColor: Colors.black,
+        ),
+      ),
+      child: child!,
+    );
+  },
+);
                           if (p != null) setState(() {
                             hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
                             minute = p.minute;
