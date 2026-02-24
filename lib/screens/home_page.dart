@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:medisafe/widgets/floating_chatbot.dart';
 import '../colors/color.dart';
 import '../widgets/card.dart';
@@ -6,6 +8,7 @@ import '../widgets/bottom_nav.dart';
 import '../widgets/chatbot_button.dart';
 import '../widgets/header_actions.dart';
 import 'chatbot_page.dart';
+import 'dart:async';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,14 +18,56 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<Map<String, String>> _doses = []; 
-  final List<String> _allergies = [];
-  final List<Map<String, String>> _medicalHistory = [];
-  final List<String> _activeMedicine = [];
+  final String _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
   
   final List<Message> _sharedMessages = []; 
   final TextEditingController _sharedController = TextEditingController();
   final TextEditingController _inputController = TextEditingController();
+
+  Timer? _minuteTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _minuteTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      if (mounted) setState(() {}); 
+    });
+  }
+
+  @override
+  void dispose() {
+    _minuteTimer?.cancel(); // Always cancel timers when leaving the page to save memory
+    super.dispose();
+  }
+
+  Future<void> _addData(String category, String value, {dynamic date}) async {
+    if (_uid.isEmpty || value.isEmpty) return;
+    
+    final userRef = FirebaseFirestore.instance.collection('users').doc(_uid);
+
+    if (category == "Allergy") {
+      await userRef.collection('Allergies').add({
+        'allergyName': value, 
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } else if (category == "History") {
+      await userRef.collection('MedicalHistory').add({
+        'diseaseName': value, 
+        'date': (date == null || date == "") ? Timestamp.now() : date, 
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+  }
+
+  Future<void> _deleteData(String collectionPath, String docId) async {
+    if (_uid.isEmpty) return;
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .collection(collectionPath)
+        .doc(docId)
+        .delete();
+  }
 
   void _openFloatingChat() {
     showDialog(
@@ -42,6 +87,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showAddDialog(String category) async {
+    _inputController.clear();
     String selectedDateStr = "Choose Date";
     DateTime? pickedDate;
 
@@ -87,8 +133,8 @@ class _HomePageState extends State<HomePage> {
                         final DateTime? picked = await showDatePicker(
                           context: context,
                           initialDate: DateTime.now(),
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime(2101),
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime.now(),
                         );
                         if (picked != null) {
                           setDialogState(() {
@@ -126,18 +172,9 @@ class _HomePageState extends State<HomePage> {
                 ElevatedButton(
                   onPressed: () {
                     if (_inputController.text.isNotEmpty) {
-                      setState(() {
-                        if (category == "Allergy") {
-                          _allergies.add(_inputController.text);
-                        } else if (category == "History") {
-                          _medicalHistory.add({
-                            "name": _inputController.text,
-                            "date": selectedDateStr == "Choose Date" ? "No Date" : selectedDateStr,
-                          });
-                        } else if (category == "Dose") {
-                          _doses.add({"time": "8.00 AM", "med": _inputController.text});
-                        }
-                      });
+                      Timestamp? ts = pickedDate != null ? Timestamp.fromDate(pickedDate!) : null;
+                      _addData(category, _inputController.text.trim(), date: ts);
+                      
                       _inputController.clear();
                       Navigator.pop(context);
                     }
@@ -164,28 +201,45 @@ class _HomePageState extends State<HomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Header 
             Container(
               padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
               decoration: const BoxDecoration(color: AppColors.royalBlue),
-              child: const Row(
-                children: [
-                  CircleAvatar(
-                    radius: 45, 
-                    backgroundColor: AppColors.white, 
-                    child: Icon(Icons.person, size: 50, color: AppColors.royalBlue)
-                  ),
-                  SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("New User", style: TextStyle(color: AppColors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-                        Text("Age : ", style: TextStyle(color: AppColors.white)),
-                      ],
-                    ),
-                  ),
-                  HeaderActions(), 
-                ],
+              child: StreamBuilder<DocumentSnapshot>(
+                stream: FirebaseFirestore.instance.collection('users').doc(_uid).snapshots(),
+                builder: (context, snapshot) {
+                  String username = "New User";
+                  String age = "";
+                  
+                  if (snapshot.hasData && snapshot.data!.exists) {
+                    final data = snapshot.data!.data() as Map<String, dynamic>?;
+                    if (data != null) {
+                      if (data.containsKey('username')) username = data['username'];
+                      if (data.containsKey('age')) age = data['age'].toString();
+                    }
+                  }
+
+                  return Row(
+                    children: [
+                      const CircleAvatar(
+                        radius: 45, 
+                        backgroundColor: AppColors.white, 
+                        child: Icon(Icons.person, size: 50, color: AppColors.royalBlue)
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(username, style: const TextStyle(color: AppColors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                            Text("Age : $age", style: const TextStyle(color: AppColors.white)),
+                          ],
+                        ),
+                      ),
+                      const HeaderActions(), 
+                    ],
+                  );
+                }
               ),
             ),
 
@@ -195,20 +249,92 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   CustomSectionBox(
                     title: "Upcoming Dose",
-                    child: _doses.isEmpty 
-                      ? const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12))) 
-                      : IntrinsicHeight(
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(_uid)
+                          .collection('schedules')
+                          .where('isActive', isEqualTo: true)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12)));
+                        }
+
+                        final docs = snapshot.data!.docs;
+                        DateTime now = DateTime.now();
+                        
+                        List<Map<String, dynamic>> upcomingDoses = [];
+
+                        for (var doc in docs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          
+                          if (data.containsKey('time') && data['time'] is Timestamp) {
+                            DateTime dt = (data['time'] as Timestamp).toDate();
+                            
+                            bool isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+                            
+                            //  Must be today AND the time must be in the future
+                            if (isToday && dt.isAfter(now)) {
+                              upcomingDoses.add({
+                                'medName': data['medicineName']?.toString().trim() ?? 'Unnamed Med',
+                                'dt': dt,
+                              });
+                            }
+                          }
+                        }
+
+                        // If all doses for today are already in the past
+                        if (upcomingDoses.isEmpty) {
+                          return const Center(
+                            child: Text("All doses completed for today! 🎉", 
+                            style: TextStyle(color: Colors.grey, fontSize: 12))
+                          );
+                        }
+
+                        // Sort the list so the earliest upcoming time is at the very top (index 0)
+                        upcomingDoses.sort((a, b) => (a['dt'] as DateTime).compareTo(b['dt'] as DateTime));
+                        
+                        // Get the exact time of the nearest dose
+                        DateTime nearestTime = upcomingDoses.first['dt'];
+                        
+                        // Find ALL medicines that share this exact nearest time (in case there are 2 pills at 8:00 PM)
+                        List<String> medsForNearestTime = upcomingDoses
+                            .where((dose) => (dose['dt'] as DateTime).isAtSameMomentAs(nearestTime))
+                            .map((dose) => dose['medName'] as String)
+                            .toSet() // Use .toSet() just in case the same med was accidentally logged twice for the same time
+                            .toList();
+
+                        // Format the time to look clean (e.g. "8:00 PM")
+                        int hour = nearestTime.hour > 12 ? nearestTime.hour - 12 : (nearestTime.hour == 0 ? 12 : nearestTime.hour);
+                        String minute = nearestTime.minute.toString().padLeft(2, '0');
+                        String period = nearestTime.hour >= 12 ? "PM" : "AM";
+                        String formattedTime = "$hour:$minute $period";
+
+                        return IntrinsicHeight(
                           child: Row(
                             children: [
-                              Text(_doses.first['time']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text(formattedTime, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                               const VerticalDivider(color: AppColors.royalBlue, width: 30, thickness: 1.5),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: _doses.map((d) => Text(d['med']!)).toList(),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  // Automatically capitalize the medicine name
+                                  children: medsForNearestTime.map((med) {
+                                    String displayMed = med[0].toUpperCase() + med.substring(1);
+                                    return Text(displayMed, style: const TextStyle(fontSize: 15));
+                                  }).toList(),
+                                ),
                               )
                             ],
                           ),
-                        ),
+                        );
+                      }
+                    ),
                   ),
                   const SizedBox(height: 20),
 
@@ -223,16 +349,32 @@ class _HomePageState extends State<HomePage> {
                           child: Column(
                             children: [
                               Expanded(
-                                child: _allergies.isEmpty 
-                                  ? const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 10)))
-                                  : ListView(
+                                child: StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(_uid)
+                                      .collection('Allergies')
+                                      .orderBy('createdAt', descending: true)
+                                      .snapshots(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState == ConnectionState.waiting) {
+                                      return const Center(child: CircularProgressIndicator());
+                                    }
+                                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                      return const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 10)));
+                                    }
+
+                                    final docs = snapshot.data!.docs;
+                                    return ListView(
                                       padding: EdgeInsets.zero,
-                                      children: _allergies.map((a) => RemovableTag(
-                                        label: a, 
+                                      children: docs.map((doc) => RemovableTag(
+                                        label: doc['allergyName'] ?? 'Unnamed', 
                                         color: AppColors.denimBlue18,
-                                        onRemove: () => setState(() => _allergies.remove(a)),
+                                        onRemove: () => _deleteData('Allergies', doc.id),
                                       )).toList(),
-                                    ),
+                                    );
+                                  },
+                                ),
                               ),
                               AddTagPlaceholder(onTap: () => _showAddDialog("Allergy")),
                             ],
@@ -240,6 +382,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const SizedBox(width: 12),
+                      
                       Expanded(
                         child: CustomSectionBox(
                           title: "Medical History",
@@ -248,17 +391,48 @@ class _HomePageState extends State<HomePage> {
                           child: Column(
                             children: [
                               Expanded(
-                                child: _medicalHistory.isEmpty
-                                  ? const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 10)))
-                                  : ListView(
+                                child: StreamBuilder<QuerySnapshot>(
+                                  stream: FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(_uid)
+                                      .collection('MedicalHistory')
+                                      .orderBy('createdAt', descending: true)
+                                      .snapshots(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState == ConnectionState.waiting) {
+                                      return const Center(child: CircularProgressIndicator());
+                                    }
+                                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                                      return const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 10)));
+                                    }
+
+                                    final docs = snapshot.data!.docs;
+                                    return ListView(
                                       padding: EdgeInsets.zero,
-                                      children: _medicalHistory.map((h) => RemovableTag(
-                                        label: h['name']!, 
-                                        subLabel: h['date'],
-                                        color: AppColors.babyBlue21,
-                                        onRemove: () => setState(() => _medicalHistory.remove(h)),
-                                      )).toList(),
-                                    ),
+                                      children: docs.map((doc) {
+                                        
+                                        String displayDate = "";
+                                        final dataMap = doc.data() as Map<String, dynamic>;
+                                        
+                                        if (dataMap.containsKey('date')) {
+                                          if (doc['date'] is Timestamp) {
+                                            DateTime dt = (doc['date'] as Timestamp).toDate();
+                                            displayDate = "${dt.day}/${dt.month}/${dt.year}";
+                                          } else {
+                                            displayDate = doc['date'].toString();
+                                          }
+                                        }
+
+                                        return RemovableTag(
+                                          label: doc['diseaseName'] ?? 'No Name', 
+                                          subLabel: displayDate.isNotEmpty ? displayDate : null,
+                                          color: AppColors.babyBlue21,
+                                          onRemove: () => _deleteData('MedicalHistory', doc.id),
+                                        );
+                                      }).toList(),
+                                    );
+                                  },
+                                ),
                               ),
                               AddTagPlaceholder(onTap: () => _showAddDialog("History")),
                             ],
@@ -272,16 +446,66 @@ class _HomePageState extends State<HomePage> {
                   CustomSectionBox(
                     title: "Active Medicine",
                     height: 150,
-                    child: _activeMedicine.isEmpty
-                      ? const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12)))
-                      : ListView(
-                          padding: EdgeInsets.symmetric(vertical: 8),
-                          children: _activeMedicine.map((m) => RemovableTag(
-                            label: m,
-                            color: const Color(0xFFD1E3F8),
-                            onRemove: () => setState(() => _activeMedicine.remove(m)),
-                          )).toList(),
-                        ),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(_uid)
+                          .collection('schedules')
+                          .where('isActive', isEqualTo: true)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12)));
+                        }
+
+                        final docs = snapshot.data!.docs;
+                        DateTime now = DateTime.now();
+                        
+                        
+                        Map<String, String> uniqueActiveMedicines = {};
+
+                        for (var doc in docs) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          
+                          if (data.containsKey('time') && data['time'] is Timestamp) {
+                            DateTime dt = (data['time'] as Timestamp).toDate();
+                            
+                            bool isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+                            
+                            if (isToday) {
+                              final rawMedName = data['medicineName']?.toString().trim() ?? 'Unknown Med';
+                              
+                              if (rawMedName.isNotEmpty) {
+                                final searchKey = rawMedName.toLowerCase();
+                                
+                                if (!uniqueActiveMedicines.containsKey(searchKey)) {
+                                  String displayName = rawMedName[0].toUpperCase() + rawMedName.substring(1);
+                                  uniqueActiveMedicines[searchKey] = displayName;
+                                }
+                              }
+                            }
+                          }
+                        }
+
+                        if (uniqueActiveMedicines.isEmpty) {
+                          return const Center(child: Text("Empty", style: TextStyle(color: Colors.grey, fontSize: 12)));
+                        }
+
+                        return ListView(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          children: uniqueActiveMedicines.values.map((medName) {
+                            return RemovableTag(
+                              label: medName,
+                              color: const Color(0xFFD1E3F8),
+                              onRemove: () {}, 
+                            );
+                          }).toList(),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

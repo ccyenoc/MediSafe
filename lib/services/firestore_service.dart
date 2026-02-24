@@ -5,8 +5,8 @@ class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  String get uid => _auth.currentUser!.uid;
-
+  String get uid => _auth.currentUser?.uid ?? '';
+  
   /// ==========================
   /// SCHEDULE METHODS
   /// ==========================
@@ -56,31 +56,69 @@ class FirestoreService {
   /// ==========================
 
   Future<void> addAllergy(String allergy) async {
-    await _firestore.collection('users').doc(uid).update({
-      'allergies': FieldValue.arrayUnion([allergy])
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('Allergies')
+        .add({
+      'allergyName': allergy, 
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> removeAllergy(String allergy) async {
-    await _firestore.collection('users').doc(uid).update({
-      'allergies': FieldValue.arrayRemove([allergy])
-    });
+  Stream<QuerySnapshot> getAllergies() {
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('Allergies')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  Future<void> removeAllergy(String docId) async {
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('Allergies')
+        .doc(docId)
+        .delete();
   }
 
   /// ==========================
   /// MEDICAL HISTORY METHODS
   /// ==========================
 
-  Future<void> addMedicalHistory(String condition) async {
-    await _firestore.collection('users').doc(uid).update({
-      'medical_history': FieldValue.arrayUnion([condition])
+  Future<void> addMedicalHistory({
+    required String condition,
+    required DateTime diagnosedDate,
+  }) async {
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('MedicalHistory')
+        .add({
+      'diseaseName': condition, 
+      'date': Timestamp.fromDate(diagnosedDate),
+      'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> removeMedicalHistory(String condition) async {
-    await _firestore.collection('users').doc(uid).update({
-      'medical_history': FieldValue.arrayRemove([condition])
-    });
+  Stream<QuerySnapshot> getMedicalHistory() {
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('MedicalHistory')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  Future<void> removeMedicalHistory(String docId) async {
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('MedicalHistory')
+        .doc(docId)
+        .delete();
   }
 
   /// ==========================
