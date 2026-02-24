@@ -68,13 +68,22 @@ class RemovableTag extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-              if (subLabel != null)
-                Text(subLabel!, style: const TextStyle(fontSize: 10, color: Colors.black54)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label, 
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  // Allow wrapping if the string is continuous
+                ),
+                if (subLabel != null)
+                  Text(
+                    subLabel!, 
+                    style: const TextStyle(fontSize: 10, color: Colors.black54),
+                  ),
+              ],
+            ),
           ),
           InkWell(
             onTap: onRemove,
@@ -98,7 +107,7 @@ class AddTagPlaceholder extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
         decoration: BoxDecoration(
-          color: Colors.blue.withOpacity(0.05),
+          color: Colors.blue.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(color: Colors.grey.shade300),
         ),

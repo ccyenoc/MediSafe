@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../models/medicine_model.dart';
@@ -12,11 +14,11 @@ class GeminiService {
   GeminiService() {
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
     _model = GenerativeModel(
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash',
       apiKey: apiKey,
       generationConfig: GenerationConfig(
         temperature: 0.2,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 8192,
       ),
       safetySettings: [
         SafetySetting(HarmCategory.harassment, HarmBlockThreshold.low),
@@ -26,83 +28,129 @@ class GeminiService {
   }
 
   // ─────────────────────────────────────────────
-  // MEDICINE IDENTIFICATION
+  // MEDICINE IDENTIFICATION (Vision + OCR)
   // ─────────────────────────────────────────────
 
-  Future<MedicineModel> identifyMedicine(String ocrText) async {
-    // Fetch user profile to personalise the AI response
+  Future<MedicineModel> identifyMedicine(String ocrText,
+      {String? imagePath}) async {
+    // Fetch user profile for personalization
     UserProfileModel? profile;
     try {
       final profileData = await FirestoreService().getUserProfileOnce();
       if (profileData != null) {
         profile = UserProfileModel.fromFirestore(profileData);
       }
-    } catch (_) {
-      // Profile fetch failed — proceed without it
-    }
+    } catch (_) {}
 
     final userContext = profile != null ? profile.toAiContext() : '';
     final hasUserContext = userContext.trim().isNotEmpty;
 
-    final prompt = '''
-You are a pharmaceutical assistant AI.
-${hasUserContext ? userContext : ''}
+    // Deduplicate repeated OCR lines (blister packs repeat the same line many times)
+    final dedupedOcr = ocrText.split('\n').toSet().toList().join('\n').trim();
 
-Given the following OCR-extracted text from a medicine packaging label, identify the medicine and return ONLY a valid JSON object with this exact structure (no markdown, no explanation, no extra text):
+    final promptText = '''You are a medicine expert AI. Your job is to give clear, specific, accurate information to someone who has zero medical knowledge.
+
+${hasUserContext ? userContext : ''}
+STEP 1 — IDENTIFY the medicine from the image and OCR text below.
+CRITICAL VALIDATION: If the image and text clearly show something that is NOT a medicine, supplement, or health product (e.g., a phone case, food, toy, screen protector), you MUST STOP. Return exactly this JSON:
+{ "name": "Unknown Medicine", "shortDescription": "", "function": "", "dosage": "", "sideEffects": [], "recipients": [], "contraindications": [], "allergies": [], "personalizedWarning": "" }
+Do NOT hallucinate a medicine. Only proceed to STEP 2 if it is actually a health product.
+
+STEP 2 — FILL IN ALL FIELDS from your pharmaceutical knowledge database. Pretend the user can only see the medicine box front — give them everything else they need to know.
+
+FIELD-BY-FIELD RULES (follow strictly):
+
+"shortDescription": Max 12 words. Ultra-brief. What this medicine is for, in the simplest words. E.g. "Helps with gout pain and bladder discomfort." or "Antibiotic tablet that fights bacterial infections."
+
+"function": 1 short sentence. Use simple everyday words and an analogy if possible. Imagine explaining to a 10-year-old. BAD: "It makes the urine less acidic which prevents calcium oxalate crystallization." GOOD: "It makes your pee less sour so crystals can't form and hurt your joints."
+
+"dosage": Format as EXACTLY 3 short lines, each on a new line, like this:\nAmount: 1 sachet (4g)\nHow often: 3 times a day\nWhen: After meals. Keep each line under 6 words. Do NOT write a paragraph.
+
+"sideEffects": List real known side effects with plain descriptions. Max 4 items. E.g. "Bloating or gassy feeling", "Stomach cramps", "Nausea if taken on empty stomach". BAD: "Gastrointestinal discomfort".
+
+"recipients": State exactly who benefits. E.g. "Adults with gout flare-ups", "People with frequent urinary tract infections", "Anyone told by a doctor their urine is too acidic".
+
+"contraindications": State exactly who must NOT take it and why in simple words. E.g. "People with high blood pressure (it contains sodium)", "Anyone with kidney failure", "Pregnant women — ask doctor first".
+
+"allergies": List the actual chemical ingredients that could cause allergic reactions. Name them. E.g. "Sodium Citrate", "Citric Acid", "Tartaric Acid", "Sodium Bicarbonate". Do NOT say "allergic to any ingredient" — that is useless.
+
+"personalizedWarning": Look closely at the image AND the OCR text. If you can clearly see an Expiry Date (e.g. "EXP", "Expiry", "Use By"), warn the user. E.g. "⚠️ The packaging says this medicine expires on [Date]." If it is obviously expired compared to today (${DateTime.now().year}), specifically say "⚠️ DO NOT TAKE: This medicine expired on [Date]." 
+If there is NO expiry date visible, check if the medicine conflicts with the user profile context. E.g. "⚠️ Warning: You have an allergy to [Ingredient]." 
+If neither applies, leave as empty string "".
+
+GENERAL RULES:
+- Plain English only. No medical jargon. Replace: "renal"→"kidney", "hypersensitivity"→"allergy", "dysuria"→"pain when peeing", "alkalinizer"→"makes urine less acidic".
+- Every field must have REAL, SPECIFIC content from your training data. Never say "not listed", "not on packet", "see a doctor for details", or leave generic filler text.
+- Lists: max 4 items, each max 10 words.
+- Text fields: max 2 sentences.
+- Return ONLY valid JSON. No markdown. No text outside the JSON.
+
+OCR text (to identify the medicine only):
+"""
+$dedupedOcr
+"""
 
 {
-  "name": "...",
-  "shortDescription": "...",
-  "function": "...",
-  "dosage": "...",
-  "sideEffects": ["...", "..."],
-  "recipients": ["...", "..."],
-  "contraindications": ["...", "..."],
-  "allergies": ["...", "..."],
-  "personalizedWarning": "${hasUserContext ? 'Write a short warning if the medicine conflicts with the user profile above, else empty string' : ''}"
-}
+  "name": "<brand name + strength>",
+  "shortDescription": "<1 sentence, specific>",
+  "function": "<1 sentence, specific mechanism>",
+  "dosage": "<specific amount, timing, method>",
+  "sideEffects": ["<specific>", "<specific>", "<specific>"],
+  "recipients": ["<specific group>", "<specific group>"],
+  "contraindications": ["<specific + reason>", "<specific + reason>"],
+  "allergies": ["<actual ingredient name>", "<actual ingredient name>"],
+  "personalizedWarning": "<Expiry warning OR allergy warning OR empty string>"
+}''';
 
-Rules:
-- If you cannot identify the medicine confidently, use "Unknown Medicine" for name and reasonable placeholder values.
-- Return ONLY valid JSON. No markdown fences. No explanation before or after.
-- Base your answer on known pharmaceutical knowledge combined with the label text.
+    // Build content parts: always include text, add image if available
+    final List<Part> parts = [];
+    if (imagePath != null) {
+      try {
+        final imageFile = File(imagePath);
+        final bytes = await imageFile.readAsBytes();
+        // Detect mime type from file extension
+        final ext = imagePath.toLowerCase().split('.').last;
+        final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
+        parts.add(DataPart(mime, bytes));
+      } catch (e) {
+        debugPrint('Could not read image file: $e');
+      }
+    }
+    parts.add(TextPart(promptText));
 
-OCR Text:
-"""
-$ocrText
-"""
-''';
-
-    // Try up to 2 times
     for (int attempt = 0; attempt < 2; attempt++) {
       try {
-        final response = await _model.generateContent([Content.text(prompt)]);
-        final text = response.text ?? '';
-        
-        // Strip any accidental markdown fences
-        final clean = text
+        final response = await _model
+            .generateContent([Content.multi(parts)]);
+        final raw = response.text ?? '';
+        debugPrint('GEMINI RAW RESPONSE: $raw');
+
+        // Strip markdown fences if present
+        final clean = raw
             .replaceAll(RegExp(r'```json\s*'), '')
             .replaceAll(RegExp(r'```\s*'), '')
             .trim();
 
-        // Extract JSON even if there's text around it
+        // Extract the JSON object
         final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(clean);
         if (jsonMatch == null) {
+          debugPrint('No JSON found in response, attempt $attempt');
           if (attempt == 0) continue;
-          return MedicineModel.unknown(ocrText);
+          throw Exception('AI did not return valid JSON. Response: $raw');
         }
 
-        final jsonStr = jsonMatch.group(0)!;
-        final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-        return MedicineModel.fromJson(json);
+        final json = jsonDecode(jsonMatch.group(0)!) as Map<String, dynamic>;
+        final model = MedicineModel.fromJson(json);
+        debugPrint('Identified: ${model.name}');
+        return model;
       } catch (e) {
+        debugPrint('GEMINI ERROR attempt $attempt: $e');
         if (attempt == 1) {
-          print("GEMINI API ERROR: $e");
-          throw Exception("Gemini API Error: $e");
+          throw Exception('Gemini API Error: $e');
         }
       }
     }
-    throw Exception("Failed to identify medicine after retries.");
+    throw Exception('Failed to identify medicine after retries.');
   }
 
   // ─────────────────────────────────────────────

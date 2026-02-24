@@ -176,7 +176,7 @@ class _HomePageState extends State<HomePage> {
                         setState(() => _doses.add({"time": "8.00 AM", "med": text}));
                       }
                       _inputController.clear();
-                      if (mounted) Navigator.pop(context);
+                      if (context.mounted) Navigator.pop(context);
                     }
                   },
                   style: ElevatedButton.styleFrom(

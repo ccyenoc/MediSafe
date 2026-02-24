@@ -73,21 +73,34 @@ class _ScanPageState extends State<ScanPage> {
       // 1. On-device OCR via ML Kit
       final ocrText = await _ocrService.extractText(imagePath);
 
-      print("========== RAW OCR TEXT START ==========\n$ocrText\n========== RAW OCR TEXT END ==========");
+      // OCR text logged only in debug builds
+      assert(() { debugPrint("RAW OCR:\n$ocrText"); return true; }());
       if (ocrText.trim().isEmpty) {
         _showError('No text found. Make sure the medicine name/label is clearly visible and well-lit.');
         return;
       }
 
-      // 2. Identify medicine via Gemini (with user profile context)
-      final medicine = await _geminiService.identifyMedicine(ocrText);
+      // 2. Identify medicine via Gemini Vision API (image + OCR text)
+      final medicine = await _geminiService.identifyMedicine(
+        ocrText,
+        imagePath: imagePath,
+      );
 
-      // 3. Navigate to result page
+      // 3. Guard — don't navigate if AI couldn't identify the medicine
+      if (medicine.name.trim().toLowerCase() == 'unknown medicine') {
+        _showError(
+          'Could not identify this medicine. '
+          'Try taking a clearer photo of the medicine name and dosage label.',
+        );
+        return;
+      }
+
+      // 4. Navigate to result page
       if (mounted) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => MedicineInfoPage(medicine: medicine),
+            builder: (_) => MedicineInfoPage(medicine: medicine, imagePath: imagePath),
           ),
         );
       }
