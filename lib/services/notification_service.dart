@@ -73,6 +73,11 @@ class NotificationService {
           importance: Importance.max,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
+          // FIX: Unable to close notification
+          enableVibration: true,
+          playSound: true,
+          autoCancel: true,  // Allows user to dismiss
+          ongoing: false,    // Must be false to allow dismissal
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
