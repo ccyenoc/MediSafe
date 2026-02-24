@@ -4,7 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../colors/color.dart';
+import '../models/medicine.dart';
+import '../services/fda_api_service.dart';
+import '../services/firestore_service.dart';
+import '../services/medicine_matcher_service.dart';
+import '../services/ocr_service.dart';
 import '../widgets/bottom_nav.dart';
+import 'ocr_results_page.dart';
 
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key});
@@ -17,7 +23,13 @@ class _ScanPageState extends State<ScanPage> {
   CameraController? _controller;
   List<CameraDescription>? _cameras;
   bool _isFlashOn = false;
+  bool _isProcessing = false;
   XFile? _galleryImage;
+  XFile? _capturedImage;
+  final OcrService _ocrService = OcrService();
+  final MedicineMatcherService _matcherService = MedicineMatcherService();
+  final FdaApiService _fdaApiService = FdaApiService();
+  final FirestoreService _firestoreService = FirestoreService();
 
   @override
   void initState() {
@@ -55,12 +67,116 @@ class _ScanPageState extends State<ScanPage> {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      setState(() => _galleryImage = image);
+      setState(() {
+        _galleryImage = image;
+        _capturedImage = null;
+      });
+      await _processImage(image);
+    }
+  }
+
+  Future<void> _captureImage() async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (controller.value.isTakingPicture) return;
+
+    final image = await controller.takePicture();
+    setState(() {
+      _capturedImage = image;
+      _galleryImage = null;
+    });
+    await _processImage(image);
+  }
+
+  Future<List<String>> _loadUserCurrentMedications() async {
+    try {
+      final snapshot = await _firestoreService.getUserProfile().first;
+      final data = snapshot.data() as Map<String, dynamic>?;
+      final meds = data?['current_medications'] ?? data?['medications'];
+      if (meds is List) {
+        return meds.map((item) => item.toString()).toList();
+      }
+    } catch (_) {
+      return [];
+    }
+    return [];
+  }
+
+  Future<void> _processImage(XFile image) async {
+    if (_isProcessing) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      final imageFile = File(image.path);
+      final extractedText = await _ocrService.extractTextFromImage(imageFile);
+      final words = _ocrService.extractWords(extractedText);
+
+      final correctedChemicalName =
+          await _fdaApiService.resolveChemicalNameFromOcr(
+        candidates: words,
+        fullText: extractedText,
+      );
+
+      final searchTerms = correctedChemicalName != null
+          ? [correctedChemicalName]
+          : words.take(5).toList();
+
+      final candidates = <Medicine>[];
+      final seenNames = <String>{};
+      for (final term in searchTerms) {
+        final results = await _fdaApiService.searchMedicine(term);
+        for (final medicine in results) {
+          final key = medicine.name.toLowerCase();
+          if (seenNames.add(key)) {
+            candidates.add(medicine);
+          }
+        }
+      }
+
+      final matched = _matcherService.findMostProbableMedicine(
+        extractedText,
+        candidates,
+      );
+
+      final alternativeMatches = _matcherService
+          .findTopMatches(extractedText, candidates, topN: 3)
+          .map((item) => item.$1)
+          .where((medicine) => matched == null || medicine.name != matched.name)
+          .toList();
+
+      final userCurrentMedications = await _loadUserCurrentMedications();
+
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => OcrResultsPage(
+            extractedText: extractedText,
+            matchedMedicine: matched,
+            alternativeMedicines: alternativeMatches,
+            userCurrentMedications: userCurrentMedications,
+            imageFile: imageFile,
+            fdaApiService: _fdaApiService,
+            firestoreService: _firestoreService,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error processing image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+      }
     }
   }
 
   @override
   void dispose() {
+    _ocrService.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -81,6 +197,13 @@ class _ScanPageState extends State<ScanPage> {
                         width: double.infinity,
                         height: double.infinity,
                       )
+                    : _capturedImage != null
+                        ? Image.file(
+                            File(_capturedImage!.path),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                          )
                     : SizedBox(
                         width: double.infinity,
                         height: double.infinity,
@@ -146,7 +269,7 @@ class _ScanPageState extends State<ScanPage> {
                       IconButton(
                         icon:
                             const Icon(Icons.photo, color: Colors.white, size: 30),
-                        onPressed: _openGallery,
+                        onPressed: _isProcessing ? null : _openGallery,
                       ),
 
                       // Camera button (round)
@@ -160,9 +283,7 @@ class _ScanPageState extends State<ScanPage> {
                         child: IconButton(
                           icon: const Icon(Icons.camera_alt,
                               color: AppColors.darkBlue, size: 32),
-                          onPressed: () {
-                            // TODO: implement capture
-                          },
+                          onPressed: _isProcessing ? null : _captureImage,
                         ),
                       ),
 
@@ -173,11 +294,20 @@ class _ScanPageState extends State<ScanPage> {
                           color: Colors.white,
                           size: 30,
                         ),
-                        onPressed: _toggleFlash,
+                        onPressed: _isProcessing ? null : _toggleFlash,
                       ),
                     ],
                   ),
                 ),
+                if (_isProcessing)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.4),
+                      child: const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      ),
+                    ),
+                  ),
               ],
             ),
     );
