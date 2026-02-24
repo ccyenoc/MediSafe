@@ -1,8 +1,12 @@
 import 'dart:io';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../colors/gradient.dart';
 import '../models/medicine_model.dart';
+import '../services/firestore_service.dart';
 import '../services/gemini_service.dart';
+import '../services/notification_service.dart';
 import '../widgets/bottom_nav.dart';
 import 'chatbot_page.dart';
 
@@ -98,11 +102,7 @@ class MedicineInfoPage extends StatelessWidget {
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => ChatbotPage(
-                            medicine: medicine,
-                            geminiService: GeminiService()
-                              ..startChatSession(medicine: medicine),
-                          ),
+                          builder: (_) => const ChatbotPage(),
                         ),
                       ),
                       icon: const Icon(Icons.chat_bubble_outline, size: 18),
@@ -412,137 +412,478 @@ class MedicineInfoPage extends StatelessWidget {
     );
   }
 
-  // ── Add to Schedule dialog ──────────────────────────────────
+  // ── Smart Add to Schedule dialog ───────────────────────────
   void _showAddScheduleDialog(BuildContext context) {
-    final controller = TextEditingController(text: medicine.name);
-    DateTime selectedDate = DateTime.now();
-    int hour = 8;
-    int minute = 0;
-    String period = 'AM';
-
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, set) => Dialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (_) => _SmartScheduleDialog(medicine: medicine),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Smart Schedule Dialog — full AI prefill + Firestore save
+// ─────────────────────────────────────────────────────────────
+class _SmartScheduleDialog extends StatefulWidget {
+  final MedicineModel medicine;
+  const _SmartScheduleDialog({required this.medicine});
+
+  @override
+  State<_SmartScheduleDialog> createState() => _SmartScheduleDialogState();
+}
+
+class _SmartScheduleDialogState extends State<_SmartScheduleDialog> {
+  static const _primary = Color(0xFF1E3F8F);
+
+  // Form state
+  DateTime selectedDate = DateTime.now();
+  int hour = 8;
+  int minute = 0;
+  String period = 'AM';
+  int timesPerDay = 1;
+  int durationDays = 7;
+  // Dynamic maxes from AI — medicine-specific
+  int maxTimesPerDay = 8;
+  int maxDurationDays = 365;
+  final noteController = TextEditingController();
+  final medicineController = TextEditingController();
+
+  // UI state
+  bool isLoadingAI = true;
+  String? errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    medicineController.text = widget.medicine.name;
+    _fetchAISuggestion();
+  }
+
+  @override
+  void dispose() {
+    noteController.dispose();
+    medicineController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchAISuggestion() async {
+    try {
+      // Get user age for age-aware suggestions
+      int? userAge;
+      try {
+        final profile = await FirestoreService().getUserProfileOnce();
+        userAge = profile?['age'] as int?;
+      } catch (_) {}
+
+      final suggestion = await GeminiService()
+          .getScheduleSuggestion(widget.medicine, userAge);
+
+      if (!mounted) return;
+      setState(() {
+        timesPerDay = (suggestion['timesPerDay'] as num?)?.toInt().clamp(1, 12) ?? 1;
+        durationDays = (suggestion['durationDays'] as num?)?.toInt().clamp(1, 365) ?? 7;
+        // Set the stepper max as medicine-specific: let user go up to 2× the AI suggestion
+        maxTimesPerDay = (timesPerDay * 2).clamp(4, 12);
+        maxDurationDays = (durationDays * 3).clamp(30, 365);
+        noteController.text = suggestion['notes']?.toString() ?? '';
+
+        // Set first dose time from suggestedTimes[0]
+        final times = suggestion['suggestedTimes'] as List?;
+        if (times != null && times.isNotEmpty) {
+          final parts = times[0].toString().split(':');
+          if (parts.length == 2) {
+            final h = int.tryParse(parts[0]) ?? 8;
+            final m = int.tryParse(parts[1]) ?? 0;
+            period = h >= 12 ? 'PM' : 'AM';
+            hour = h > 12 ? h - 12 : (h == 0 ? 12 : h);
+            minute = m;
+          }
+        }
+        isLoadingAI = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => isLoadingAI = false);
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => errorMessage = null);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => errorMessage = 'You must be signed in to save a schedule.');
+        return;
+      }
+
+      int finalHour = hour;
+      if (period == 'PM' && hour != 12) finalHour += 12;
+      if (period == 'AM' && hour == 12) finalHour = 0;
+
+      final schedulesRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('schedules');
+
+      // Create entries: durationDays × timesPerDay documents
+      for (int day = 0; day < durationDays; day++) {
+        for (int dose = 0; dose < timesPerDay; dose++) {
+          // Spread doses evenly across the day
+          final hoursOffset = timesPerDay > 1 ? (dose * (24 ~/ timesPerDay)) : 0;
+          final doseHour = (finalHour + hoursOffset) % 24;
+
+          final doseTime = DateTime(
+            selectedDate.year,
+            selectedDate.month,
+            selectedDate.day + day,
+            doseHour,
+            minute,
+          );
+
+          if (doseTime.isAfter(DateTime.now())) {
+            final docRef = await schedulesRef.add({
+              'medicineName': medicineController.text.trim(),
+              'notes': noteController.text.trim(),
+              'time': Timestamp.fromDate(doseTime),
+              'isActive': true,
+              'isTaken': false,
+              'isRecurring': durationDays > 1,
+              'timesPerDay': timesPerDay,
+              'durationDays': durationDays,
+            });
+
+            // Schedule notification separately — don't fail the whole save if it errors
+            try {
+              await NotificationService().scheduleNotification(
+                id: docRef.id.hashCode,
+                title: '💊 Time for your medicine',
+                body: 'Take your ${medicineController.text.trim()} now.',
+                scheduledDate: doseTime,
+              );
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Schedule saved successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() => errorMessage = 'Failed to save schedule. Please try again.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: ConstrainedBox(
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
                 children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.arrow_back),
+                  ),
+                  const SizedBox(width: 12),
                   const Text('Add Schedule',
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 20),
-                  const Text('Select Date'),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: selectedDate,
-                        firstDate: DateTime.now()
-                            .subtract(const Duration(days: 365)),
-                        lastDate:
-                            DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (picked != null) set(() => selectedDate = picked);
-                    },
-                    child: _field(
-                        '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Time'),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _timePicker(
-                          value: hour.toString().padLeft(2, '0'),
-                          onTap: () async {
-                            final p = await showTimePicker(
-                                context: ctx,
-                                initialTime:
-                                    TimeOfDay(hour: hour, minute: minute));
-                            if (p != null) {
-                              set(() {
-                                hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
-                                minute = p.minute;
-                                period = p.period == DayPeriod.am ? 'AM' : 'PM';
-                              });
-                            }
-                          }),
-                      const Text(':',
-                          style: TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold)),
-                      _timePicker(
-                          value: minute.toString().padLeft(2, '0'),
-                          onTap: () async {
-                            final p = await showTimePicker(
-                                context: ctx,
-                                initialTime:
-                                    TimeOfDay(hour: hour, minute: minute));
-                            if (p != null) {
-                              set(() {
-                                hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
-                                minute = p.minute;
-                                period = p.period == DayPeriod.am ? 'AM' : 'PM';
-                              });
-                            }
-                          }),
-                      _timePicker(
-                          value: period,
-                          onTap: () => set(
-                              () => period = period == 'AM' ? 'PM' : 'AM')),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Medicine'),
-                  const SizedBox(height: 8),
-                  Container(
-                    height: 45,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: _primary),
-                    ),
-                    child: TextField(
-                      controller: controller,
-                      decoration: const InputDecoration(
-                          border: InputBorder.none, isCollapsed: true),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Center(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 32, vertical: 12),
-                      ),
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Save'),
-                    ),
-                  ),
                 ],
               ),
-            ),
+              const SizedBox(height: 16),
+
+              if (isLoadingAI) ...[
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text('Getting AI schedule suggestion...',
+                          style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Medicine field
+                        const Text('Medicine',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        _inputBox(
+                          child: TextField(
+                            controller: medicineController,
+                            decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                isCollapsed: true,
+                                contentPadding: EdgeInsets.zero),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Date
+                        const Text('Start Date',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime.now()
+                                  .add(const Duration(days: 365)),
+                            );
+                            if (picked != null) {
+                              setState(() => selectedDate = picked);
+                            }
+                          },
+                          child: _staticBox(
+                              '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // First dose time
+                        const Text('First Dose Time',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            _timeChip(
+                                hour.toString().padLeft(2, '0'), () async {
+                              final p = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay(
+                                      hour: hour, minute: minute));
+                              if (p != null) {
+                                setState(() {
+                                  hour = p.hourOfPeriod == 0
+                                      ? 12
+                                      : p.hourOfPeriod;
+                                  minute = p.minute;
+                                  period =
+                                      p.period == DayPeriod.am ? 'AM' : 'PM';
+                                });
+                              }
+                            }),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Text(':',
+                                  style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                            _timeChip(
+                                minute.toString().padLeft(2, '0'), () async {
+                              final p = await showTimePicker(
+                                  context: context,
+                                  initialTime: TimeOfDay(
+                                      hour: hour, minute: minute));
+                              if (p != null) {
+                                setState(() {
+                                  hour = p.hourOfPeriod == 0
+                                      ? 12
+                                      : p.hourOfPeriod;
+                                  minute = p.minute;
+                                  period =
+                                      p.period == DayPeriod.am ? 'AM' : 'PM';
+                                });
+                              }
+                            }),
+                            const SizedBox(width: 8),
+                            _timeChip(
+                                period,
+                                () => setState(() =>
+                                    period = period == 'AM' ? 'PM' : 'AM')),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Times per day stepper
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Text('Times per day',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text('AI',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: _primary,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                            _stepper(
+                              value: timesPerDay,
+                              min: 1,
+                              max: maxTimesPerDay,
+                              onChanged: (v) => setState(() => timesPerDay = v),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Duration stepper
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Text('Duration (days)',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Text('AI',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: _primary,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                            _stepper(
+                              value: durationDays,
+                              min: 1,
+                              max: maxDurationDays,
+                              onChanged: (v) =>
+                                  setState(() => durationDays = v),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Notes
+                        Row(
+                          children: [
+                            const Text('Notes',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text('AI',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: _primary,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        _inputBox(
+                          child: TextField(
+                            controller: noteController,
+                            maxLines: 2,
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              isCollapsed: true,
+                              contentPadding: EdgeInsets.zero,
+                              hintText: 'e.g. Take after meals',
+                            ),
+                          ),
+                        ),
+
+                        // Error
+                        if (errorMessage != null) ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(errorMessage!,
+                                style: const TextStyle(
+                                    color: Colors.red, fontSize: 13)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: isLoadingAI ? null : _save,
+                  child: const Text('Save Schedule',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _field(String text) => Container(
-        height: 45,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        alignment: Alignment.centerLeft,
+  // ─── Helper widgets ──────────────────────────────────────────
+  Widget _inputBox({required Widget child}) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _primary),
+        ),
+        child: child,
+      );
+
+  Widget _staticBox(String text) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: _primary),
@@ -550,20 +891,60 @@ class MedicineInfoPage extends StatelessWidget {
         child: Text(text),
       );
 
-  Widget _timePicker({required String value, required VoidCallback onTap}) =>
-      GestureDetector(
+  Widget _timeChip(String value, VoidCallback onTap) => GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 60,
-          height: 45,
+          width: 56,
+          height: 44,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: _primary),
           ),
-          child: Text(value,
-              style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w500)),
+          child:
+              Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
         ),
+      );
+
+  Widget _stepper({
+    required int value,
+    required int min,
+    required int max,
+    required ValueChanged<int> onChanged,
+  }) =>
+      Row(
+        children: [
+          GestureDetector(
+            onTap: value > min ? () => onChanged(value - 1) : null,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: value > min ? _primary : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.remove, color: Colors.white, size: 16),
+            ),
+          ),
+          Container(
+            width: 44,
+            alignment: Alignment.center,
+            child: Text('$value',
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+          GestureDetector(
+            onTap: value < max ? () => onChanged(value + 1) : null,
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: value < max ? _primary : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.add, color: Colors.white, size: 16),
+            ),
+          ),
+        ],
       );
 }

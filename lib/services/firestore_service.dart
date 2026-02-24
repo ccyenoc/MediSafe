@@ -5,7 +5,7 @@ class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  String get uid => _auth.currentUser?.uid ?? '';
+  String get uid => _auth.currentUser!.uid;
 
   /// ==========================
   /// SCHEDULE METHODS
@@ -84,7 +84,7 @@ class FirestoreService {
   }
 
   /// ==========================
-  /// USER PROFILE STREAM
+  /// USER PROFILE
   /// ==========================
 
   Stream<DocumentSnapshot> getUserProfile() {
@@ -93,7 +93,6 @@ class FirestoreService {
 
   /// One-time profile fetch for AI use
   Future<Map<String, dynamic>?> getUserProfileOnce() async {
-    if (uid.isEmpty) return null;
     final doc = await _firestore.collection('users').doc(uid).get();
     return doc.data();
   }
@@ -136,5 +135,37 @@ class FirestoreService {
       }
     });
   }
-}
 
+  /// ==========================
+  /// SCAN HISTORY METHODS
+  /// ==========================
+
+  /// Saves a successful scan to Firestore for the schedule scan-history picker.
+  Future<void> saveScanHistory({
+    required String medicineName,
+    required String shortDesc,
+    String? imagePath,
+  }) async {
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('scan_history')
+        .add({
+      'medicineName': medicineName,
+      'shortDesc': shortDesc,
+      'imagePath': imagePath ?? '',
+      'scannedAt': Timestamp.now(),
+    });
+  }
+
+  /// Returns the 20 most recent scans, newest first.
+  Stream<QuerySnapshot> getScanHistory() {
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('scan_history')
+        .orderBy('scannedAt', descending: true)
+        .limit(20)
+        .snapshots();
+  }
+}

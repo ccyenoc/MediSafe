@@ -48,9 +48,18 @@ class GeminiService {
     // Deduplicate repeated OCR lines (blister packs repeat the same line many times)
     final dedupedOcr = ocrText.split('\n').toSet().toList().join('\n').trim();
 
+    // Feature 5: Age-aware prompt modifiers
+    final ageHint = profile != null && profile.age > 0
+        ? (profile.age < 12
+            ? '\nIMPORTANT: This is a CHILD patient (age ${profile.age}). Adjust dosage guidance for children.'
+            : profile.age >= 65
+                ? '\nIMPORTANT: This is an ELDERLY patient (age ${profile.age}). Flag any medicines that require reduced dosage for elderly.'
+                : '')
+        : '';
+
     final promptText = '''You are a medicine expert AI. Your job is to give clear, specific, accurate information to someone who has zero medical knowledge.
 
-${hasUserContext ? userContext : ''}
+${hasUserContext ? userContext : ''}$ageHint
 STEP 1 — IDENTIFY the medicine from the image and OCR text below.
 CRITICAL VALIDATION: If the image and text clearly show something that is NOT a medicine, supplement, or health product (e.g., a phone case, food, toy, screen protector), you MUST STOP. Return exactly this JSON:
 { "name": "Unknown Medicine", "shortDescription": "", "function": "", "dosage": "", "sideEffects": [], "recipients": [], "contraindications": [], "allergies": [], "personalizedWarning": "" }
@@ -215,5 +224,49 @@ If the user asks about something that may conflict with their known allergies or
       }
       return 'Sorry, something went wrong. Please try again.';
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // SMART SCHEDULE SUGGESTION (Feature 3)
+  // ─────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getScheduleSuggestion(
+      MedicineModel medicine, int? userAge) async {
+    final ageStr = userAge != null
+        ? 'User Age: $userAge.${userAge < 12 ? " Adjust for child." : ""}${userAge >= 65 ? " Prefer max twice daily for elderly." : ""}'
+        : '';
+
+    final prompt = '''Given this medicine: ${medicine.name}
+Dosage info: ${medicine.dosage}
+$ageStr
+
+Return a JSON schedule suggestion:
+{"timesPerDay": 3, "durationDays": 7, "suggestedTimes": ["08:00","14:00","20:00"], "notes": "Take with food"}
+Rules:
+- timesPerDay: integer 1-4 only.
+- durationDays: integer 1-90 only.
+- Return ONLY valid JSON, nothing else.''';
+
+    try {
+      final response = await _model.generateContent([Content.text(prompt)]);
+      final raw = response.text ?? '';
+      final clean = raw
+          .replaceAll(RegExp(r'```json\s*'), '')
+          .replaceAll(RegExp(r'```\s*'), '')
+          .trim();
+      final match = RegExp(r'\{[\s\S]*\}').firstMatch(clean);
+      if (match != null) {
+        return jsonDecode(match.group(0)!) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Schedule AI error: $e');
+    }
+    // Fallback defaults
+    return {
+      'timesPerDay': 1,
+      'durationDays': 7,
+      'suggestedTimes': ['08:00'],
+      'notes': '',
+    };
   }
 }

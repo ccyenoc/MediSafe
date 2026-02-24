@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../colors/color.dart';
 import '../services/ocr_service.dart';
 import '../services/gemini_service.dart';
+import '../services/firestore_service.dart';
 import '../widgets/bottom_nav.dart';
 import 'medicine_information_page.dart';
 
@@ -95,7 +96,16 @@ class _ScanPageState extends State<ScanPage> {
         return;
       }
 
-      // 4. Navigate to result page
+      // 4. Save to scan history for schedule picker
+      try {
+        FirestoreService().saveScanHistory(
+          medicineName: medicine.name,
+          shortDesc: medicine.shortDescription,
+          imagePath: imagePath,
+        );
+      } catch (_) {}
+
+      // 5. Navigate to result page
       if (mounted) {
         Navigator.push(
           context,

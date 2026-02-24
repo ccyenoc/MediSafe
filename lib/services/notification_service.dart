@@ -3,10 +3,18 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 
 class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
+
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
+  bool _initialized = false;
+
   Future<void> init() async {
+    if (_initialized) return;
+
     tz.initializeTimeZones();
 
     const AndroidInitializationSettings androidSettings =
@@ -25,6 +33,24 @@ class NotificationService {
     );
 
     await _notifications.initialize(settings);
+
+    // Request Android 13+ notification permission
+    await _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.requestNotificationsPermission();
+
+    // Request iOS permission
+    await _notifications
+        .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+
+    _initialized = true;
   }
 
   Future<void> scheduleNotification({
@@ -33,6 +59,7 @@ class NotificationService {
     required String body,
     required DateTime scheduledDate,
   }) async {
+    await init();
     await _notifications.zonedSchedule(
       id,
       title,
@@ -42,8 +69,10 @@ class NotificationService {
         android: const AndroidNotificationDetails(
           'medication_channel',
           'Medication Reminders',
-          importance: Importance.high,
+          channelDescription: 'Reminds you when to take your medication',
+          importance: Importance.max,
           priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,

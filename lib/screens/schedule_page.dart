@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../widgets/bottom_nav.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -69,10 +70,14 @@ void initState() {
                 child: ElevatedButton.icon(
   style: ElevatedButton.styleFrom(
     backgroundColor: const Color(0xFF1E3F8F),
-    foregroundColor: Colors.white, // 👈 makes text + icon white
+    foregroundColor: Colors.white,
   ),
   onPressed: () {
-    _showAddScheduleDialog();
+    // Fix 4: use the new SmartScheduleDialog (same as from MedicineInfoPage)
+    showDialog(
+      context: context,
+      builder: (_) => const _StandaloneSmartScheduleDialog(),
+    );
   },
   icon: const Icon(Icons.add),
   label: const Text("Add Schedule"),
@@ -109,9 +114,9 @@ void initState() {
     if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
       return Column(
         children: [
-          _scheduleSectionFromData("Morning", [], Colors.lightBlue.shade50),
-          _scheduleSectionFromData("Afternoon / Evening", [], Colors.yellow.shade50),
-          _scheduleSectionFromData("Night", [], Colors.grey.shade200),
+          _scheduleSectionFromData(context, "Morning", [], Colors.lightBlue.shade50),
+          _scheduleSectionFromData(context, "Afternoon / Evening", [], Colors.yellow.shade50),
+          _scheduleSectionFromData(context, "Night", [], Colors.grey.shade200),
         ],
       );
     }
@@ -138,9 +143,9 @@ void initState() {
 
     return Column(
       children: [
-        _scheduleSectionFromData("Morning", morning, Colors.lightBlue.shade50),
-        _scheduleSectionFromData("Afternoon / Evening", afternoon, Colors.yellow.shade50),
-        _scheduleSectionFromData("Night", night, Colors.grey.shade200),
+        _scheduleSectionFromData(context, "Morning", morning, Colors.lightBlue.shade50),
+        _scheduleSectionFromData(context, "Afternoon / Evening", afternoon, Colors.yellow.shade50),
+        _scheduleSectionFromData(context, "Night", night, Colors.grey.shade200),
       ],
     );
   },
@@ -426,9 +431,13 @@ centerTitle: false, // 👈 left aligned
       return StatefulBuilder(
       
         builder: (context, setDialogState) {
-          return Dialog(
+           return Dialog(
             backgroundColor: Colors.transparent,
-            child: Center(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
               child: Container(
                 width: MediaQuery.of(context).size.width * 0.85,
                 padding: const EdgeInsets.all(20),
@@ -437,10 +446,11 @@ centerTitle: false, // 👈 left aligned
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(color: const Color(0xFF1E3F8F)),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
 
                     GestureDetector(
                       onTap: () => Navigator.pop(context),
@@ -904,6 +914,7 @@ if (isRecurring && repeatUntil == null) {
                 ),
               ),
             ),
+          ),
           );
         },
       );
@@ -942,40 +953,167 @@ Widget _timeBox({
 
   showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+    ),
     builder: (context) {
-      return StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('scan_history')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        builder: (context, scrollController) => Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Row(
+                children: [
+                  Text('Scan History',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ],
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .collection('scan_history')
+                    .orderBy('scannedAt', descending: true)
+                    .limit(20)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-          final docs = snapshot.data!.docs;
+                  final docs = snapshot.data!.docs;
 
-          if (docs.isEmpty) {
-            return const Center(child: Text("No Scan History"));
-          }
+                  if (docs.isEmpty) {
+                    return const Center(
+                      child: Text('No scan history yet.\nScan a medicine first.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey)),
+                    );
+                  }
 
-          return ListView(
-            children: docs.map((doc) {
-              return ListTile(
-                title: Text(doc['medicineName']),
-                onTap: () {
-                  controller.text = doc['medicineName'];
-                  Navigator.pop(context);
+                  return ListView.separated(
+                    controller: scrollController,
+                    itemCount: docs.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final medicineName = data['medicineName'] ?? '';
+                      final shortDesc = data['shortDesc'] ?? '';
+                      final imagePath = data['imagePath'] as String? ?? '';
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: imagePath.isNotEmpty &&
+                                  File(imagePath).existsSync()
+                              ? Image.file(
+                                  File(imagePath),
+                                  width: 52,
+                                  height: 52,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEEF2FF),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.medication,
+                                      color: Color(0xFF1E3F8F)),
+                                ),
+                        ),
+                        title: Text(medicineName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: shortDesc.isNotEmpty
+                            ? Text(shortDesc,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.grey))
+                            : null,
+                        trailing:
+                            const Icon(Icons.arrow_forward_ios, size: 14),
+                        onTap: () {
+                          controller.text = medicineName;
+                          Navigator.pop(context);
+                          setDialogState(() {});
+                        },
+                        // Fix 3: long-press to delete scan history entry
+                        onLongPress: () async {
+                          final confirm =
+                              await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text(
+                                  'Delete history?'),
+                              content: Text(
+                                  'Remove "$medicineName" from scan history?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(
+                                          ctx, false),
+                                  child:
+                                      const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(
+                                          ctx, true),
+                                  child: const Text(
+                                      'Delete',
+                                      style: TextStyle(
+                                          color:
+                                              Colors.red)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .collection('scan_history')
+                                .doc(doc.id)
+                                .delete();
+                          }
+                        },
+                      );
+                    },
+                  );
                 },
-              );
-            }).toList(),
-          );
-        },
+              ),
+            ),
+          ],
+        ),
       );
     },
   );
 }
+
 
 Future<void> _deactivateExpiredSchedules() async {
   final user = FirebaseAuth.instance.currentUser;
@@ -1009,6 +1147,7 @@ Future<void> _deactivateExpiredSchedules() async {
 }
 
 Widget _scheduleSectionFromData(
+  BuildContext context,
   String title,
   List<QueryDocumentSnapshot> schedules,
   Color pillColor,
@@ -1177,24 +1316,72 @@ Widget _scheduleSectionFromData(
                                 const SizedBox(height: 10),
 
                                 ...docs.map((doc) {
-                                  return Container(
-                                    height: 32,
-                                    margin:
-                                        const EdgeInsets.only(bottom: 8),
-                                    padding:
-                                        const EdgeInsets.symmetric(horizontal: 16),
-                                    alignment: Alignment.centerLeft,
-                                    decoration: BoxDecoration(
-                                      color: pillColor.withOpacity(0.4),
-                                      borderRadius:
-                                          BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color:
-                                            const Color(0xFF1E3F8F),
+                                  final docId = doc.id;
+                                  final medicineName =
+                                      (doc.data() as Map<String, dynamic>)['medicineName'] ?? '';
+                                  return Dismissible(
+                                    key: Key(docId),
+                                    direction: DismissDirection.endToStart,
+                                    background: Container(
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(right: 16),
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade100,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Icon(Icons.delete_outline,
+                                          color: Colors.red),
+                                    ),
+                                    confirmDismiss: (_) => showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: const Text('Delete schedule?'),
+                                        content: Text(
+                                            'Remove "$medicineName" from this slot?'),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, true),
+                                            child: const Text('Delete',
+                                                style: TextStyle(
+                                                    color: Colors.red)),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    child: Text(
-                                      doc['medicineName'],
+                                    onDismissed: (_) async {
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(FirebaseAuth
+                                              .instance.currentUser!.uid)
+                                          .collection('schedules')
+                                          .doc(docId)
+                                          .delete();
+                                    },
+                                    child: Container(
+                                      height: 36,
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12),
+                                      alignment: Alignment.centerLeft,
+                                      decoration: BoxDecoration(
+                                        color: pillColor.withValues(alpha: 0.4),
+                                        borderRadius:
+                                            BorderRadius.circular(20),
+                                        border: Border.all(
+                                            color: const Color(0xFF1E3F8F)),
+                                      ),
+                                      child: Text(
+                                        medicineName,
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
                                     ),
                                   );
                                 }),
@@ -1272,10 +1459,502 @@ Widget _medicinePill(String name, Color color) {
     padding: const EdgeInsets.symmetric(horizontal: 16),
     alignment: Alignment.centerLeft,
     decoration: BoxDecoration(
-      color: color.withOpacity(0.4),
+      color: color.withValues(alpha: 0.4),
       borderRadius: BorderRadius.circular(20),
       border: Border.all(color: const Color(0xFF1E3F8F)),
     ),
-    child: Text(name),
+    child: Text(name, overflow: TextOverflow.ellipsis),
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Standalone Smart Schedule Dialog (used by schedule_page Add btn)
+// No MedicineModel — user picks name; still calls Gemini via name+dosage text
+// ─────────────────────────────────────────────────────────────
+class _StandaloneSmartScheduleDialog extends StatefulWidget {
+  const _StandaloneSmartScheduleDialog();
+
+  @override
+  State<_StandaloneSmartScheduleDialog> createState() =>
+      _StandaloneSmartScheduleDialogState();
+}
+
+class _StandaloneSmartScheduleDialogState
+    extends State<_StandaloneSmartScheduleDialog> {
+  static const _primary = Color(0xFF1E3F8F);
+
+  DateTime selectedDate = DateTime.now();
+  int hour = 8;
+  int minute = 0;
+  String period = 'AM';
+  int timesPerDay = 1;
+  int durationDays = 7;
+  int maxTimesPerDay = 8;
+  int maxDurationDays = 90;
+  final noteController = TextEditingController();
+  final medicineController = TextEditingController();
+  bool isSaving = false;
+  String? errorMessage;
+
+  @override
+  void dispose() {
+    noteController.dispose();
+    medicineController.dispose();
+    super.dispose();
+  }
+
+  void _pickFromScanHistory() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.55,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        builder: (ctx2, scrollController) => Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40, height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Scan History',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(user.uid)
+                    .collection('scan_history')
+                    .orderBy('scannedAt', descending: true)
+                    .limit(30)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final docs = snapshot.data!.docs;
+                  if (docs.isEmpty) {
+                    return const Center(
+                      child: Text('No scan history yet.\nScan a medicine to populate this.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey)),
+                    );
+                  }
+                  return ListView.separated(
+                    controller: scrollController,
+                    itemCount: docs.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final doc = docs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      final name = data['medicineName'] ?? '';
+                      final desc = data['shortDesc'] ?? '';
+                      final imgPath = data['imagePath'] as String? ?? '';
+
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: imgPath.isNotEmpty && File(imgPath).existsSync()
+                              ? Image.file(File(imgPath),
+                                  width: 52, height: 52, fit: BoxFit.cover)
+                              : Container(
+                                  width: 52, height: 52,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEEF2FF),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.medication,
+                                      color: _primary),
+                                ),
+                        ),
+                        title: Text(name,
+                            style: const TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: desc.isNotEmpty
+                            ? Text(desc,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.grey))
+                            : null,
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                        onTap: () {
+                          setState(() => medicineController.text = name);
+                          Navigator.pop(ctx);
+                        },
+                        onLongPress: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (c) => AlertDialog(
+                              title: const Text('Delete history?'),
+                              content: Text('Remove "$name"?'),
+                              actions: [
+                                TextButton(
+                                    onPressed: () => Navigator.pop(c, false),
+                                    child: const Text('Cancel')),
+                                TextButton(
+                                    onPressed: () => Navigator.pop(c, true),
+                                    child: const Text('Delete',
+                                        style: TextStyle(color: Colors.red))),
+                              ],
+                            ),
+                          );
+                          if (confirm == true) {
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .collection('scan_history')
+                                .doc(doc.id)
+                                .delete();
+                          }
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Future<void> _save() async {
+    if (medicineController.text.trim().isEmpty) {
+      setState(() => errorMessage = 'Please enter a medicine name.');
+      return;
+    }
+    setState(() { isSaving = true; errorMessage = null; });
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() { isSaving = false; errorMessage = 'Not signed in.'; });
+        return;
+      }
+
+      int finalHour = hour;
+      if (period == 'PM' && hour != 12) finalHour += 12;
+      if (period == 'AM' && hour == 12) finalHour = 0;
+
+      final schedulesRef = FirebaseFirestore.instance
+          .collection('users').doc(user.uid).collection('schedules');
+
+      for (int day = 0; day < durationDays; day++) {
+        for (int dose = 0; dose < timesPerDay; dose++) {
+          final hoursOffset = timesPerDay > 1 ? (dose * (24 ~/ timesPerDay)) : 0;
+          final doseHour = (finalHour + hoursOffset) % 24;
+          final doseTime = DateTime(
+            selectedDate.year, selectedDate.month, selectedDate.day + day,
+            doseHour, minute,
+          );
+          if (doseTime.isAfter(DateTime.now())) {
+            final docRef = await schedulesRef.add({
+              'medicineName': medicineController.text.trim(),
+              'notes': noteController.text.trim(),
+              'time': Timestamp.fromDate(doseTime),
+              'isActive': true,
+              'isTaken': false,
+              'isRecurring': durationDays > 1,
+              'timesPerDay': timesPerDay,
+              'durationDays': durationDays,
+            });
+            try {
+              await NotificationService().scheduleNotification(
+                id: docRef.id.hashCode,
+                title: '💊 Time for your medicine',
+                body: 'Take your ${medicineController.text.trim()} now.',
+                scheduledDate: doseTime,
+              );
+            } catch (_) {}
+          }
+        }
+      }
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Schedule saved!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() { isSaving = false; errorMessage = 'Failed to save. Try again.'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: ConstrainedBox(
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.arrow_back),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Add Schedule',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Medicine',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      _box(child: TextField(
+                        controller: medicineController,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none, isCollapsed: true,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: 'Medicine name',
+                        ),
+                      )),
+                      const SizedBox(height: 4),
+                      // Choose from scan history
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => _pickFromScanHistory(),
+                          icon: const Icon(Icons.history, size: 16),
+                          label: const Text('Choose from scan history',
+                              style: TextStyle(fontSize: 13)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _primary,
+                            padding: EdgeInsets.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Start Date',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: () async {
+                          final p = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(const Duration(days: 365)),
+                          );
+                          if (p != null) setState(() => selectedDate = p);
+                        },
+                        child: _staticBox(
+                            '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('First Dose Time',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        _chip(hour.toString().padLeft(2, '0'), () async {
+                          final p = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay(hour: hour, minute: minute));
+                          if (p != null) setState(() {
+                            hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
+                            minute = p.minute;
+                            period = p.period == DayPeriod.am ? 'AM' : 'PM';
+                          });
+                        }),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(':',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        ),
+                        _chip(minute.toString().padLeft(2, '0'), () async {
+                          final p = await showTimePicker(
+                              context: context,
+                              initialTime: TimeOfDay(hour: hour, minute: minute));
+                          if (p != null) setState(() {
+                            hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
+                            minute = p.minute;
+                            period = p.period == DayPeriod.am ? 'AM' : 'PM';
+                          });
+                        }),
+                        const SizedBox(width: 8),
+                        _chip(period, () => setState(
+                            () => period = period == 'AM' ? 'PM' : 'AM')),
+                      ]),
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Times per day',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                          _stepper(timesPerDay, 1, maxTimesPerDay,
+                              (v) => setState(() => timesPerDay = v)),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Duration (days)',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                          _stepper(durationDays, 1, maxDurationDays,
+                              (v) => setState(() => durationDays = v)),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Notes',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      _box(child: TextField(
+                        controller: noteController,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none, isCollapsed: true,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: 'e.g. Take after meals',
+                        ),
+                      )),
+                      if (errorMessage != null) ...[  
+                        const SizedBox(height: 10),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(errorMessage!,
+                              style: const TextStyle(
+                                  color: Colors.red, fontSize: 13)),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  onPressed: isSaving ? null : _save,
+                  child: isSaving
+                      ? const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Text('Save Schedule',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _box({required Widget child}) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _primary),
+        ),
+        child: child,
+      );
+
+  Widget _staticBox(String text) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _primary),
+        ),
+        child: Text(text),
+      );
+
+  Widget _chip(String value, VoidCallback onTap) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 56, height: 44,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _primary),
+          ),
+          child: Text(value,
+              style: const TextStyle(fontWeight: FontWeight.w500)),
+        ),
+      );
+
+  Widget _stepper(int value, int min, int max, ValueChanged<int> onChanged) =>
+      Row(children: [
+        GestureDetector(
+          onTap: value > min ? () => onChanged(value - 1) : null,
+          child: Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(
+              color: value > min ? _primary : Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.remove, color: Colors.white, size: 16),
+          ),
+        ),
+        Container(
+          width: 44, alignment: Alignment.center,
+          child: Text('$value',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        ),
+        GestureDetector(
+          onTap: value < max ? () => onChanged(value + 1) : null,
+          child: Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(
+              color: value < max ? _primary : Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.add, color: Colors.white, size: 16),
+          ),
+        ),
+      ]);
 }
