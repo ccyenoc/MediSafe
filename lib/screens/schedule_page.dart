@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/bottom_nav.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../services/notification_service.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -10,9 +11,18 @@ class SchedulePage extends StatefulWidget {
   State<SchedulePage> createState() => _SchedulePageState();
 }
 
+
 class _SchedulePageState extends State<SchedulePage> {
   DateTime selectedDate = DateTime.now();
   DateTime? repeatUntil;   // ✅ HERE
+
+  final NotificationService notificationService = NotificationService();
+
+  @override
+void initState() {
+  super.initState();
+  notificationService.init();
+}
 
   Stream<QuerySnapshot> _getSchedulesForSelectedDate() {
   final user = FirebaseAuth.instance.currentUser;
@@ -789,6 +799,16 @@ if (isRecurring && repeatUntil == null) {
     minute,
   );
 
+  if (firstScheduleDate.isBefore(DateTime.now())) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text("Scheduled time must be in the future."),
+      backgroundColor: Colors.red,
+    ),
+  );
+  return;
+}
+
   final schedulesRef = FirebaseFirestore.instance
       .collection('users')
       .doc(user.uid)
@@ -796,7 +816,7 @@ if (isRecurring && repeatUntil == null) {
 
   // 🔵 NON-RECURRING
   if (!isRecurring) {
-    await schedulesRef.add({
+    final docRef = await schedulesRef.add({
       'medicineName': medicineController.text.trim(),
       'time': Timestamp.fromDate(firstScheduleDate),
       'notes': noteController.text.trim(),
@@ -805,6 +825,13 @@ if (isRecurring && repeatUntil == null) {
       'isRecurring': false,
       'repeatUntil': null,
     });
+
+    await notificationService.scheduleNotification(
+  id: docRef.id.hashCode,
+  title: "Medication Reminder 💊",
+  body: medicineController.text.trim(),
+  scheduledDate: firstScheduleDate,
+);
   }
 
   // 🔵 RECURRING DAILY
@@ -829,7 +856,7 @@ if (isRecurring && repeatUntil == null) {
     DateTime currentDate = firstScheduleDate;
 
     while (!currentDate.isAfter(repeatUntil!)) {
-      await schedulesRef.add({
+      final docRef = await schedulesRef.add({
         'medicineName': medicineController.text.trim(),
         'time': Timestamp.fromDate(currentDate),
         'notes': noteController.text.trim(),
@@ -838,6 +865,15 @@ if (isRecurring && repeatUntil == null) {
         'isRecurring': true,
         'repeatUntil': Timestamp.fromDate(repeatUntil!),
       });
+
+      await notificationService.scheduleNotification(
+  id: docRef.id.hashCode,
+  title: "Medication Reminder 💊",
+  body: medicineController.text.trim(),
+  scheduledDate: currentDate,
+);
+
+    
 
       currentDate = currentDate.add(const Duration(days: 1));
     }
