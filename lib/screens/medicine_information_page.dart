@@ -102,7 +102,7 @@ class MedicineInfoPage extends StatelessWidget {
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const ChatbotPage(),
+                          builder: (_) => ChatbotPage(medicine: medicine),
                         ),
                       ),
                       icon: const Icon(Icons.chat_bubble_outline, size: 18),
