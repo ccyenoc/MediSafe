@@ -4,6 +4,7 @@ import '../widgets/bottom_nav.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -22,8 +23,15 @@ class _SchedulePageState extends State<SchedulePage> {
   @override
 void initState() {
   super.initState();
+  _requestPermissions();
   notificationService.init();
 }
+
+  Future<void> _requestPermissions() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
+  }
 
   Stream<QuerySnapshot> _getSchedulesForSelectedDate() {
   final user = FirebaseAuth.instance.currentUser;
@@ -1382,6 +1390,9 @@ Widget _scheduleSectionFromData(
                                           .collection('schedules')
                                           .doc(docId)
                                           .delete();
+                                      
+                                      // Cancel the scheduled notification using the same ID generation logic
+                                      await NotificationService().cancelNotification(docId.hashCode);
                                     },
                                     child: Container(
                                       height: 36,
