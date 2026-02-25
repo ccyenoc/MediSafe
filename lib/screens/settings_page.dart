@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:medisafe/screens/chatbot_page.dart';
 import 'package:medisafe/screens/login_page.dart';
 import 'package:medisafe/screens/near_me.dart';
 import 'package:medisafe/screens/notification_page.dart';
@@ -175,20 +174,6 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       child: Column(
         children: [
-          _menuItem(
-            "AI Explanations", 
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text("Detailed ", style: TextStyle(color: Colors.grey, fontSize: 14)), 
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward, color: Colors.black),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatbotPage())),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.royalBlue),
           _menuItem("Reminders", trailing: Switch(value: _remindersEnabled, onChanged: (v) => setState(() => _remindersEnabled = v), activeColor: AppColors.royalBlue)),
           const Divider(height: 1, color: AppColors.royalBlue),
           _menuItem("About Us", onTap: () => _showAboutUsDialog()),

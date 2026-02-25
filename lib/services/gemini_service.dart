@@ -236,15 +236,15 @@ If the user asks about something that may conflict with their known allergies or
         ? 'User Age: $userAge.${userAge < 12 ? " Adjust for child." : ""}${userAge >= 65 ? " Prefer max twice daily for elderly." : ""}'
         : '';
 
-    final prompt = '''Given this medicine: ${medicine.name}
+      final prompt = '''Given this medicine: ${medicine.name}
 Dosage info: ${medicine.dosage}
 $ageStr
 
 Return a JSON schedule suggestion:
-{"timesPerDay": 3, "durationDays": 7, "suggestedTimes": ["08:00","14:00","20:00"], "notes": "Take with food"}
+{"timesPerDay": 3, "durationDays": 5, "suggestedTimes": ["08:00","14:00","20:00"], "notes": "Take with food"}
 Rules:
 - timesPerDay: integer 1-4 only.
-- durationDays: integer 1-90 only.
+- durationDays: integer 1-90 only. Try to determine how many days this medicine should be taken based on the dosage text. If it is an antibiotic, it is usually 5-7 days. If a chronic medication (like blood pressure), it might be 30 days. If the text says e.g., "for 14 days", use 14. If unclear, provide a reasonable default like 5. 
 - Return ONLY valid JSON, nothing else.''';
 
     try {
