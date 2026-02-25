@@ -140,7 +140,7 @@ class _NearMePageState extends State<NearMePage> {
 
             final placeId = place['place_id'];
             
-\            if (seenPlaceIds.contains(placeId)) continue;
+            if (seenPlaceIds.contains(placeId)) continue;
             seenPlaceIds.add(placeId);
 
             final lat = place['geometry']['location']['lat'];
