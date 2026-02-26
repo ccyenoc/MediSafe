@@ -1425,13 +1425,36 @@ Widget _scheduleSectionFromData(
                                           children: [
                                             TextButton(
                                               onPressed: () {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                        'Details coming soon.'),
-                                                    duration:
-                                                        Duration(seconds: 1),
+                                                final scheduleData = doc
+                                                    .data() as Map<String, dynamic>;
+                                                final timestamp =
+                                                    scheduleData['time']
+                                                        as Timestamp;
+                                                final dateTime =
+                                                    timestamp.toDate();
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (_) =>
+                                                      _ScheduleDetailsDialog(
+                                                    docId: docId,
+                                                    medicineName:
+                                                        medicineName,
+                                                    dateTime: dateTime,
+                                                    notes: scheduleData['notes']
+                                                            as String? ??
+                                                        '',
+                                                    isRecurring: scheduleData[
+                                                            'isRecurring']
+                                                        as bool? ??
+                                                        false,
+                                                    repeatUntil: scheduleData[
+                                                                'repeatUntil'] !=
+                                                            null
+                                                        ? (scheduleData[
+                                                                'repeatUntil']
+                                                            as Timestamp)
+                                                            .toDate()
+                                                        : null,
                                                   ),
                                                 );
                                               },
@@ -1612,7 +1635,6 @@ Text(
     ),
   );
 }
-
 
 Widget _medicinePill(String name, Color color) {
   return Container(
@@ -2200,4 +2222,408 @@ class _StandaloneSmartScheduleDialogState
           ),
         ),
       ]);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Schedule Details Dialog (for viewing/editing existing schedules)
+// ─────────────────────────────────────────────────────────────
+class _ScheduleDetailsDialog extends StatefulWidget {
+  final String docId;
+  final String medicineName;
+  final DateTime dateTime;
+  final String notes;
+  final bool isRecurring;
+  final DateTime? repeatUntil;
+
+  const _ScheduleDetailsDialog({
+    required this.docId,
+    required this.medicineName,
+    required this.dateTime,
+    required this.notes,
+    required this.isRecurring,
+    required this.repeatUntil,
+  });
+
+  @override
+  State<_ScheduleDetailsDialog> createState() => _ScheduleDetailsDialogState();
+}
+
+class _ScheduleDetailsDialogState extends State<_ScheduleDetailsDialog> {
+  static const _primary = Color(0xFF1E3F8F);
+
+  late TextEditingController medicineController;
+  late TextEditingController noteController;
+  late DateTime selectedDate;
+  late int hour;
+  late int minute;
+  late String period;
+  late bool isRecurringLocal;
+  late DateTime? repeatUntilLocal;
+  bool isSaving = false;
+  String? errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    medicineController = TextEditingController(text: widget.medicineName);
+    noteController = TextEditingController(text: widget.notes);
+    selectedDate = widget.dateTime;
+    hour = widget.dateTime.hour > 12
+        ? widget.dateTime.hour - 12
+        : widget.dateTime.hour == 0
+            ? 12
+            : widget.dateTime.hour;
+    minute = widget.dateTime.minute;
+    period = widget.dateTime.hour >= 12 ? "PM" : "AM";
+    isRecurringLocal = widget.isRecurring;
+    repeatUntilLocal = widget.repeatUntil;
+  }
+
+  @override
+  void dispose() {
+    medicineController.dispose();
+    noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveChanges() async {
+    if (medicineController.text.trim().isEmpty) {
+      setState(() => errorMessage = 'Please enter a medicine name.');
+      return;
+    }
+
+    setState(() {
+      isSaving = true;
+      errorMessage = null;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() {
+          isSaving = false;
+          errorMessage = 'Not signed in.';
+        });
+        return;
+      }
+
+      int finalHour = hour;
+      if (period == 'PM' && hour != 12) finalHour += 12;
+      if (period == 'AM' && hour == 12) finalHour = 0;
+
+      final updatedTime = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        finalHour,
+        minute,
+      );
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('schedules')
+          .doc(widget.docId)
+          .update({
+        'medicineName': medicineController.text.trim(),
+        'time': Timestamp.fromDate(updatedTime),
+        'notes': noteController.text.trim(),
+        'isRecurring': isRecurringLocal,
+        'repeatUntil': isRecurringLocal && repeatUntilLocal != null
+            ? Timestamp.fromDate(repeatUntilLocal!)
+            : null,
+      });
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Schedule updated successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        isSaving = false;
+        errorMessage = 'Failed to update. Try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: ConstrainedBox(
+        constraints:
+            BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.arrow_back),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text('Schedule Details',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                fit: FlexFit.loose,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Date',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: () async {
+                          final p = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate:
+                                DateTime.now().subtract(const Duration(days: 365)),
+                            lastDate:
+                                DateTime.now().add(const Duration(days: 365)),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Colors.red,
+                                    onPrimary: Colors.white,
+                                    onSurface: Colors.black,
+                                  ),
+                                  dialogBackgroundColor: Colors.white,
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (p != null) setState(() => selectedDate = p);
+                        },
+                        child: _staticBox(
+                            '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Scheduled Time',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      Row(children: [
+                        _chip(hour.toString().padLeft(2, '0'), () async {
+                          final p = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(hour: hour, minute: minute),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Colors.red,
+                                    onPrimary: Colors.white,
+                                    surface: Colors.white,
+                                    onSurface: Colors.black,
+                                  ),
+                                  timePickerTheme:
+                                      const TimePickerThemeData(
+                                    backgroundColor: Colors.white,
+                                    hourMinuteTextColor: Colors.black,
+                                    dayPeriodTextColor: Colors.red,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (p != null)
+                            setState(() {
+                              hour = p.hourOfPeriod == 0
+                                  ? 12
+                                  : p.hourOfPeriod;
+                              minute = p.minute;
+                              period = p.period == DayPeriod.am ? 'AM' : 'PM';
+                            });
+                        }),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(':',
+                              style: TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.bold)),
+                        ),
+                        _chip(minute.toString().padLeft(2, '0'), () async {
+                          final p = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay(hour: hour, minute: minute),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Colors.red,
+                                    onPrimary: Colors.white,
+                                    surface: Colors.white,
+                                    onSurface: Colors.black,
+                                  ),
+                                  timePickerTheme:
+                                      const TimePickerThemeData(
+                                    backgroundColor: Colors.white,
+                                    hourMinuteTextColor: Colors.black,
+                                    dayPeriodTextColor: Colors.red,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (p != null)
+                            setState(() {
+                              hour = p.hourOfPeriod == 0
+                                  ? 12
+                                  : p.hourOfPeriod;
+                              minute = p.minute;
+                              period = p.period == DayPeriod.am ? 'AM' : 'PM';
+                            });
+                        }),
+                        const SizedBox(width: 8),
+                        _chip(period,
+                            () => setState(() =>
+                                period = period == 'AM' ? 'PM' : 'AM')),
+                      ]),
+                      const SizedBox(height: 14),
+                      const Text('Medicine',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      _box(
+                        child: TextField(
+                          controller: medicineController,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isCollapsed: true,
+                            contentPadding: EdgeInsets.zero,
+                            hintText: 'Medicine name',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      const Text('Notes',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      _box(
+                        child: TextField(
+                          controller: noteController,
+                          maxLines: 2,
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isCollapsed: true,
+                            contentPadding: EdgeInsets.zero,
+                            hintText: 'e.g. After meals',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      
+                      if (errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            errorMessage!,
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: isSaving ? null : _saveChanges,
+                  child: isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation(Colors.white),
+                          ),
+                        )
+                      : const Text("Save Changes"),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _box({required Widget child}) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF2FF),
+          border: Border.all(color: _primary),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: child,
+      );
+
+  Widget _staticBox(String text) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEF2FF),
+          border: Border.all(color: _primary),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(text),
+      );
+
+  Widget _chip(String value, VoidCallback onTap) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 60,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEEF2FF),
+            border: Border.all(color: _primary),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
 }
