@@ -1,5 +1,6 @@
 import 'dart:io';
-import 'dart:convert';
+import 'dart:convert'; 
+import 'package:flutter/foundation.dart' show kIsWeb; 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,9 +9,10 @@ import 'package:medisafe/screens/chatbot_page.dart';
 import 'package:medisafe/screens/login_page.dart';
 import 'package:medisafe/screens/near_me.dart';
 import 'package:medisafe/screens/notification_page.dart';
-import 'package:medisafe/screens/schedule_page.dart';
+import 'package:medisafe/screens/schedule_page.dart'; 
 import '../colors/color.dart';
-import '../services/firestore_service.dart';
+import 'package:medisafe/screens/landing_page.dart';
+import '../widgets/card.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -20,63 +22,25 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  String _username = "New User";
-  String _age = "";
-  List<String> allergies = [];
-  List<Map<String, String>> medicalHistory = [];
   bool _remindersEnabled = true;
   XFile? _profileImage;
-  String? _profilePicBase64;
   final ImagePicker _picker = ImagePicker();
-  final _firestoreService = FirestoreService();
-  bool _isLoading = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadProfile();
-  }
-
-  Future<void> _loadProfile() async {
-    try {
-      final data = await _firestoreService.getUserProfileOnce();
-      if (data != null && mounted) {
-        setState(() {
-          _username = data['username'] ?? 'New User';
-          _age = (data['age'] ?? 0).toString();
-          _profilePicBase64 = data['profile_pic_base64'];
-          allergies = List<String>.from(data['allergies'] ?? []);
-          medicalHistory = List<String>.from(data['medical_history'] ?? [])
-              .map((e) => {'name': e, 'date': ''})
-              .toList();
-          _isLoading = false;
-        });
-      }
-    } catch (_) {
-      setState(() => _isLoading = false);
-    }
-  }
+  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
 
   Future<void> _pickImage(StateSetter setDialogState) async {
-    final XFile? selected = await _picker.pickImage(source: ImageSource.gallery);
+    final XFile? selected = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 400,    // Resize to max 400px width
+      maxHeight: 400,   // Resize to max 400px height
+      imageQuality: 70, // Compress quality to 70%
+    );
+    
     if (selected != null) {
       setDialogState(() {
         _profileImage = selected;
       });
     }
-  }
-
-  ImageProvider? _getAvatarImage() {
-    if (_profileImage != null) {
-      return FileImage(File(_profileImage!.path));
-    } else if (_profilePicBase64 != null && _profilePicBase64!.isNotEmpty) {
-      try {
-        return MemoryImage(base64Decode(_profilePicBase64!));
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
   }
 
   @override
@@ -142,35 +106,62 @@ class _SettingsPageState extends State<SettingsPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: const Color(0xFFD1E3F8), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.royalBlue)),
-      child: Row(
-        children: [
-          Stack(
+      child: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').doc(_uid).snapshots(),
+        builder: (context, snapshot) {
+          String username = "New User";
+          String age = "Not Set";
+          String profilePicBase64 = "";
+
+          if (snapshot.hasData && snapshot.data!.exists) {
+            final data = snapshot.data!.data() as Map<String, dynamic>;
+            username = data['username'] ?? username;
+            age = data['age']?.toString() ?? age;
+            profilePicBase64 = data['profile_pic_base64'] ?? "";
+          }
+
+          ImageProvider? displayImage;
+          if (_profileImage != null) {
+            displayImage = kIsWeb ? NetworkImage(_profileImage!.path) : FileImage(File(_profileImage!.path)) as ImageProvider;
+          } else if (profilePicBase64.isNotEmpty) {
+            try {
+              displayImage = MemoryImage(base64Decode(profilePicBase64));
+            } catch (e) {
+              displayImage = null; 
+            }
+          }
+
+          return Row(
             children: [
-              CircleAvatar(
-                radius: 45, 
-                backgroundColor: Colors.white, 
-                backgroundImage: _getAvatarImage(),
-                child: _getAvatarImage() == null ? const Icon(Icons.person, size: 50, color: AppColors.royalBlue) : null,
-              ),
-              Positioned(
-                bottom: 0, right: 0,
-                child: GestureDetector(
-                  onTap: _showEditProfileDialog,
-                  child: Container(
-                    padding: const EdgeInsets.all(4), 
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), 
-                    child: const Icon(Icons.edit, size: 16, color: Colors.black)
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 45, 
+                    backgroundColor: Colors.white, 
+                    backgroundImage: displayImage,
+                    child: displayImage == null ? const Icon(Icons.person, size: 50, color: AppColors.royalBlue) : null,
                   ),
-                ),
+                  Positioned(
+                    bottom: 0, right: 0,
+                    child: GestureDetector(
+                      onTap: () => _showEditProfileDialog(username, age, profilePicBase64),
+                      child: Container(
+                        padding: const EdgeInsets.all(4), 
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), 
+                        child: const Icon(Icons.edit, size: 16, color: Colors.black)
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(width: 20),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text("Username: $username", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                Text("Age: $age", style: const TextStyle(fontSize: 16)),
+              ]),
             ],
-          ),
-          const SizedBox(width: 20),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text("Username: $_username", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-            Text("Age: $_age", style: const TextStyle(fontSize: 16)),
-          ]),
-        ],
+          );
+        }
       ),
     );
   }
@@ -184,21 +175,7 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       child: Column(
         children: [
-          _menuItem(
-            "AI Explanations", 
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text("Detailed ", style: TextStyle(color: Colors.grey, fontSize: 14)), 
-                IconButton(
-                  icon: const Icon(Icons.arrow_forward, color: Colors.black),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatbotPage())),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: AppColors.royalBlue),
-          _menuItem("Reminders", trailing: Switch(value: _remindersEnabled, onChanged: (v) => setState(() => _remindersEnabled = v), activeColor: AppColors.blue1)),
+          _menuItem("Reminders", trailing: Switch(value: _remindersEnabled, onChanged: (v) => setState(() => _remindersEnabled = v), activeColor: AppColors.royalBlue)),
           const Divider(height: 1, color: AppColors.royalBlue),
           _menuItem("About Us", onTap: () => _showAboutUsDialog()),
           const Divider(height: 1, color: AppColors.royalBlue),
@@ -206,9 +183,9 @@ class _SettingsPageState extends State<SettingsPage> {
             print('[AUTH] Signing out user');
             await FirebaseAuth.instance.signOut();
             print('[AUTH] ✅ User signed out');
-            if (mounted) {
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false);
-            }
+//             if (mounted) {
+//               Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false);
+//             }
           })),
           const Divider(height: 1, color: AppColors.royalBlue),
           _menuItem("Delete Account", onTap: _showDeleteAccountDialog),
@@ -217,14 +194,22 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _showEditProfileDialog() {
-    TextEditingController userCtrl = TextEditingController(text: _username);
-    TextEditingController ageCtrl = TextEditingController(text: _age);
+  void _showEditProfileDialog(String currentUsername, String currentAge, String currentBase64) {
+    TextEditingController userCtrl = TextEditingController(text: currentUsername);
+    TextEditingController ageCtrl = TextEditingController(text: currentAge);
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder( 
         builder: (context, setDialogState) {
+          
+          ImageProvider? previewImage;
+          if (_profileImage != null) {
+            previewImage = kIsWeb ? NetworkImage(_profileImage!.path) : FileImage(File(_profileImage!.path)) as ImageProvider;
+          } else if (currentBase64.isNotEmpty) {
+            try { previewImage = MemoryImage(base64Decode(currentBase64)); } catch (_) {}
+          }
+
           return Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
             child: Padding(
@@ -237,8 +222,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   CircleAvatar(
                     radius: 40,
                     backgroundColor: Colors.white,
-                    backgroundImage: _getAvatarImage(),
-                    child: _getAvatarImage() == null ? const Icon(Icons.person, size: 40, color: Colors.grey) : null,
+                    backgroundImage: previewImage,
+                    child: previewImage == null ? const Icon(Icons.person, size: 40, color: Colors.grey) : null,
                   ),
                   const Text("Change profile picture", style: TextStyle(fontSize: 12)),
                   const SizedBox(height: 8),
@@ -253,21 +238,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () async {
-                      setState(() { 
-                        _username = userCtrl.text; 
-                        _age = ageCtrl.text; 
-                      });
-                      
-                      String? base64Str;
-                      if (_profileImage != null) {
-                        final bytes = await File(_profileImage!.path).readAsBytes();
-                        base64Str = base64Encode(bytes);
-                        _profilePicBase64 = base64Str;
+                      if (_uid.isNotEmpty) {
+                        Map<String, dynamic> updateData = {
+                          'username': userCtrl.text.trim(),
+                          'age': ageCtrl.text.trim(),
+                        };
+
+                        if (_profileImage != null) {
+                          final bytes = await _profileImage!.readAsBytes();
+                          updateData['profile_pic_base64'] = base64Encode(bytes);
+                        }
+
+                        await FirebaseFirestore.instance.collection('users').doc(_uid).set(updateData, SetOptions(merge: true)); 
+                        
+                        setState(() { _profileImage = null; });
                       }
-                      
-                      final parsedAge = int.tryParse(ageCtrl.text) ?? 0;
-                      await _firestoreService.updateProfileBasicInfo(_username, parsedAge, base64Str);
-                      if (mounted) Navigator.pop(context);
+                      if(mounted) Navigator.pop(context);
                     },
                     child: const Text("Save"),
                   )
@@ -316,18 +302,60 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Delete Account?"),
-        content: const Text("This action is permanent and will wipe all your medical data."),
+        title: const Text("Delete Account?", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        content: const Text("This action is permanent and will completely wipe all your medical data, schedules, and allergies. This cannot be undone."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              _deleteAccountPermanently(context);
-              setState(() {
-                _username = "New User"; _age = ""; allergies.clear(); medicalHistory.clear(); _profileImage = null;
-              });
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false);
+            onPressed: () async {
+              final user = FirebaseAuth.instance.currentUser;
+              if (user == null) return;
+              
+              final uid = user.uid;
+              final firestore = FirebaseFirestore.instance;
+
+              Navigator.pop(context);
+
+              try {
+                Future<void> deleteSubcollection(String collectionName) async {
+                  final snapshot = await firestore.collection('users').doc(uid).collection(collectionName).get();
+                  for (var doc in snapshot.docs) {
+                    await doc.reference.delete();
+                  }
+                }
+
+                await deleteSubcollection('schedules');
+                await deleteSubcollection('Allergies');
+                await deleteSubcollection('MedicalHistory');
+                await deleteSubcollection('scan_history');
+
+                await firestore.collection('users').doc(uid).delete();
+
+                await user.delete();
+
+                if (mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const LandingScreen()), 
+                    (route) => false
+                  );
+                }
+              } on FirebaseAuthException catch (e) {
+                if (e.code == 'requires-recent-login') {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Security check: Please log out and log back in before deleting your account."),
+                        backgroundColor: Colors.red,
+                        duration: Duration(seconds: 4),
+                      ),
+                    );
+                  }
+                } else {
+                  print("Failed to delete user: ${e.message}");
+                }
+              }
             },
             child: const Text("Delete Everything", style: TextStyle(color: Colors.white)),
           ),
@@ -481,90 +509,291 @@ class _SettingsPageState extends State<SettingsPage> {
     ],
   );
 
-  Widget _listInput(String hint, IconData icon, VoidCallback onTap, {TextEditingController? controller}) => Container(
-    margin: const EdgeInsets.symmetric(vertical: 5), padding: const EdgeInsets.symmetric(horizontal: 15),
-    decoration: BoxDecoration(color: const Color(0xFFD1E3F8), borderRadius: BorderRadius.circular(15), border: Border.all(color: AppColors.royalBlue)),
-    child: Row(
-      children: [
-        Expanded(child: TextField(controller: controller, readOnly: controller == null, decoration: InputDecoration(hintText: hint, border: InputBorder.none))),
-        IconButton(icon: Icon(icon), onPressed: onTap),
-      ],
-    ),
-  );
+  void _showAllergiesDialog() { 
+    TextEditingController addCtrl = TextEditingController();
 
-  void _showAllergiesDialog() { TextEditingController addCtrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Row(children: [Text("Allergies ", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), Icon(Icons.edit, size: 18)]),
-                    GestureDetector(onTap: () => Navigator.pop(context), child: const Icon(Icons.cancel_outlined)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                ...allergies.map((a) => _listInput(a, Icons.remove, () async {
-                  await _firestoreService.removeAllergy(a);
-                  setState(() => allergies.remove(a));
-                  setDialogState(() {});
-                })),
-                _listInput("Add", Icons.add, () async {
-                  if (addCtrl.text.isNotEmpty) {
-                    await _firestoreService.addAllergy(addCtrl.text);
-                    setState(() => allergies.add(addCtrl.text));
-                    addCtrl.clear();
-                    setDialogState(() {});
+      builder: (context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Manage Allergies", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  GestureDetector(onTap: () => Navigator.pop(context), child: const Icon(Icons.close, color: Colors.grey)),
+                ],
+              ),
+              const SizedBox(height: 15),
+
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                width: double.infinity,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance.collection('users').doc(_uid).collection('Allergies').orderBy('createdAt', descending: true).snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                      return const Text("No allergies found.", style: TextStyle(color: Colors.grey));
+                    }
+
+                    return SingleChildScrollView(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 0,
+                        children: snapshot.data!.docs.map((doc) {
+                          return RemovableTag(
+                            label: doc['allergyName'] ?? 'Unnamed',
+                            color: AppColors.denimBlue18,
+                            onRemove: () async {
+                              await doc.reference.delete(); 
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    );
                   }
-                }, controller: addCtrl),
-              ],
-            ),
+                ),
+              ),
+              
+              const Divider(height: 30),
+
+              TextField(
+                controller: addCtrl,
+                cursorColor: AppColors.royalBlue,
+                decoration: InputDecoration(
+                  hintText: "Enter new allergy",
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppColors.royalBlue), 
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
+              ),
+              const SizedBox(height: 15),
+              
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.royalBlue,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  onPressed: () async {
+                    if (addCtrl.text.isNotEmpty && _uid.isNotEmpty) {
+                      await FirebaseFirestore.instance.collection('users').doc(_uid).collection('Allergies').add({
+                        'allergyName': addCtrl.text.trim(),
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+                      addCtrl.clear();
+                    }
+                  },
+                  child: const Text("Add Allergy", style: TextStyle(fontSize: 16)),
+                ),
+              )
+            ],
           ),
         ),
       ),
     );
   }
 
-  void _showMedicalHistoryDialog() { TextEditingController diseaseCtrl = TextEditingController();
-    String selectedDate = "Choose Date";
+  void _showMedicalHistoryDialog() { 
+    TextEditingController diseaseCtrl = TextEditingController();
+    String selectedDateStr = "Date";
+    DateTime? pickedDate;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Medical History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 15),
-                ...medicalHistory.map((h) => ListTile(title: Text(h['name']!), subtitle: Text(h['date']!))),
-                TextField(controller: diseaseCtrl, decoration: const InputDecoration(hintText: "Enter disease")),
-                TextButton(
-                  onPressed: () async {
-                    DateTime? picked = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2100));
-                    if (picked != null) setDialogState(() => selectedDate = "${picked.day}/${picked.month}/${picked.year}");
-                  },
-                  child: Text(selectedDate),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Medical History", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    GestureDetector(onTap: () => Navigator.pop(context), child: const Icon(Icons.close, color: Colors.grey)),
+                  ]
                 ),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (diseaseCtrl.text.isNotEmpty) {
-                      await _firestoreService.addMedicalHistory(diseaseCtrl.text);
-                      setState(() => medicalHistory.add({"name": diseaseCtrl.text, "date": selectedDate}));
-                      if (mounted) Navigator.pop(context);
+                const SizedBox(height: 15),
+                
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('users').doc(_uid).collection('MedicalHistory').orderBy('createdAt', descending: true).snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return const Text("No history found.", style: TextStyle(color: Colors.grey));
+                      }
+
+                      return ListView(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        children: snapshot.data!.docs.map((doc) {
+                          String displayDate = "";
+                          final data = doc.data() as Map<String, dynamic>;
+                          
+                          if (data.containsKey('date')) {
+                            if (doc['date'] is Timestamp) {
+                              DateTime dt = (doc['date'] as Timestamp).toDate();
+                              displayDate = "${dt.day}/${dt.month}/${dt.year}";
+                            } else {
+                              displayDate = doc['date'].toString();
+                            }
+                          }
+
+                          return RemovableTag(
+                            label: doc['diseaseName'] ?? 'Unknown',
+                            subLabel: displayDate.isNotEmpty ? displayDate : null,
+                            color: AppColors.babyBlue21, 
+                            onRemove: () async {
+                              await doc.reference.delete();
+                            },
+                          );
+                        }).toList(),
+                      );
                     }
-                  },
-                  child: const Text("Add History"),
+                  ),
+                ),
+
+                const Divider(height: 30),
+
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextField(
+                        controller: diseaseCtrl,
+                        cursorColor: AppColors.royalBlue,
+                        decoration: InputDecoration(
+                          hintText: "Enter disease",
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppColors.royalBlue), 
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8), 
+                    
+                    Expanded(
+                      flex: 2,
+                      child: InkWell(
+                        onTap: () async {
+                          DateTime? picked = await showDatePicker(
+                            context: context, 
+                            initialDate: DateTime.now(), 
+                            firstDate: DateTime(1900), 
+                            lastDate: DateTime.now(),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: AppColors.royalBlue, 
+                                    onPrimary: Colors.white,
+                                    surface: Colors.white,
+                                    onSurface: Colors.black,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            }
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              pickedDate = picked;
+                              selectedDateStr = "${picked.day}/${picked.month}/${picked.year}";
+                            });
+                          }
+                        },
+                        child: Container(
+                          height: 48, 
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(12)
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  selectedDateStr, 
+                                  style: TextStyle(
+                                    color: pickedDate == null ? Colors.grey : Colors.black,
+                                    fontSize: 13,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(Icons.calendar_today, size: 16, color: AppColors.royalBlue), 
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 15),
+                
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.royalBlue, 
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () async {
+                      if (diseaseCtrl.text.isNotEmpty && _uid.isNotEmpty) {
+                        Timestamp? ts = pickedDate != null ? Timestamp.fromDate(pickedDate!) : null;
+                        
+                        await FirebaseFirestore.instance.collection('users').doc(_uid).collection('MedicalHistory').add({
+                          'diseaseName': diseaseCtrl.text.trim(),
+                          'date': ts ?? Timestamp.now(), 
+                          'createdAt': FieldValue.serverTimestamp(),
+                        });
+                        
+                        diseaseCtrl.clear();
+                        setDialogState(() {
+                          selectedDateStr = "Date"; 
+                          pickedDate = null;
+                        });
+                      }
+                    },
+                    child: const Text("Add History", style: TextStyle(fontSize: 16)),
+                  ),
                 )
               ],
             ),
@@ -574,7 +803,8 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _showFAQDialog() { final List<Map<String, String>> faqs = [
+  void _showFAQDialog() { 
+    final List<Map<String, String>> faqs = [
       {"q": "What is MediSafe?", "a": "A smart companion for managing your medications and health records."},
       {"q": "How do I add a reminder?", "a": "Navigate to the Schedule page and record your medication details."},
       {"q": "Is my medical data secure?", "a": "Yes, all personal data is encrypted and stored locally on your device."},
@@ -590,13 +820,13 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("FAQ"),
+        title: const Text("FAQ", style: TextStyle(color: AppColors.royalBlue, fontWeight: FontWeight.bold)),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
             shrinkWrap: true,
             itemCount: faqs.length,
-            itemBuilder: (context, i) => ExpansionTile(title: Text(faqs[i]['q']!), children: [Padding(padding: const EdgeInsets.all(8.0), child: Text(faqs[i]['a']!))]),
+            itemBuilder: (context, i) => ExpansionTile(title: Text(faqs[i]['q']!, style: const TextStyle(fontWeight: FontWeight.w600)), children: [Padding(padding: const EdgeInsets.all(8.0), child: Text(faqs[i]['a']!))]),
           ),
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))],

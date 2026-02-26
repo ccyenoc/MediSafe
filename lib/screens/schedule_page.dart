@@ -4,6 +4,7 @@ import '../widgets/bottom_nav.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -22,8 +23,15 @@ class _SchedulePageState extends State<SchedulePage> {
   @override
 void initState() {
   super.initState();
+  _requestPermissions();
   notificationService.init();
 }
+
+  Future<void> _requestPermissions() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
+  }
 
   Stream<QuerySnapshot> _getSchedulesForSelectedDate() {
   final user = FirebaseAuth.instance.currentUser;
@@ -323,73 +331,76 @@ centerTitle: false, // 👈 left aligned
           const SizedBox(height: 8),
 
           Container(
-  height: 150, // 👈 this limits the card height
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(22),
-    border: Border.all(color: const Color(0xFF1E3F8F)),
-  ),
-  child: SingleChildScrollView(
-    padding: const EdgeInsets.all(12),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // LEFT
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                time,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFF1E3F8F)),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(12),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // LEFT
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            time,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
 
-              // 👇 add more pills later → scroll activates automatically
-              _pill(pillColor),
-              const SizedBox(height: 8),
-              _pill(pillColor),
-            ],
-          ),
-        ),
+                          // 👇 add more pills later → scroll activates automatically
+                          _pill(pillColor),
+                          const SizedBox(height: 8),
+                          _pill(pillColor),
+                        ],
+                      ),
+                    ),
 
-        // VERTICAL LINE
-        Container(
-          width: 1,
-          height: 120,
-          color: const Color(0xFF1E3F8F),
-          margin: const EdgeInsets.symmetric(horizontal: 12),
-        ),
+                    // VERTICAL LINE
+                    Container(
+                      width: 1,
+                      color: const Color(0xFF1E3F8F),
+                      margin: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
 
-        // NOTES
-        Container(
-          width: 110,
-          height: 120,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: pillColor,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFF1E3F8F)),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const Text(
-                "Notes",
-                style: TextStyle(fontWeight: FontWeight.bold),
+                    // NOTES
+                    Container(
+                      width: 110,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: pillColor,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: const Color(0xFF1E3F8F)),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const Text(
+                            "Notes",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Text(
+                                note,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                note,
-                textAlign: TextAlign.center,
-              ),
-            ],
+            ),
           ),
-        ),
-      ],
-    ),
-  ),
-),
 
         ],
       ),
@@ -516,7 +527,7 @@ centerTitle: false, // 👈 left aligned
                         _timeBox(
                           value: hour.toString().padLeft(2, '0'),
                           onTap: () async {
-                            final picked = await showTimePicker(
+                           final picked = await showTimePicker(
   context: context,
   initialTime: TimeOfDay(hour: hour, minute: minute),
   builder: (context, child) {
@@ -539,7 +550,6 @@ centerTitle: false, // 👈 left aligned
   },
 );
 
-
                             if (picked != null) {
                               setDialogState(() {
                                 hour = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
@@ -556,10 +566,27 @@ centerTitle: false, // 👈 left aligned
                           value: minute.toString().padLeft(2, '0'),
                           onTap: () async {
                             final picked = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: hour, minute: minute),
-                            );
-
+  context: context,
+  initialTime: TimeOfDay(hour: hour, minute: minute),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,          // top header color
+          onPrimary: Colors.white,      // text on header
+          surface: Colors.white,        // dialog background
+          onSurface: Colors.black,      // clock text
+        ),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: Colors.white,
+          hourMinuteTextColor: Colors.black,
+          dayPeriodTextColor: Colors.red,
+        ),
+      ),
+      child: child!,
+    );
+  },
+);
                             if (picked != null) {
                               setDialogState(() {
                                 hour = picked.hourOfPeriod == 0 ? 12 : picked.hourOfPeriod;
@@ -1363,6 +1390,9 @@ Widget _scheduleSectionFromData(
                                           .collection('schedules')
                                           .doc(docId)
                                           .delete();
+                                      
+                                      // Cancel the scheduled notification using the same ID generation logic
+                                      await NotificationService().cancelNotification(docId.hashCode);
                                     },
                                     child: Container(
                                       height: 36,
@@ -1488,7 +1518,7 @@ class _StandaloneSmartScheduleDialogState
   int minute = 0;
   String period = 'AM';
   int timesPerDay = 1;
-  int durationDays = 7;
+  int durationDays = 3;
   int maxTimesPerDay = 8;
   int maxDurationDays = 90;
   final noteController = TextEditingController();
@@ -1657,12 +1687,34 @@ class _StandaloneSmartScheduleDialogState
       if (period == 'PM' && hour != 12) finalHour += 12;
       if (period == 'AM' && hour == 12) finalHour = 0;
 
+      final firstDoseTime = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        finalHour,
+        minute,
+      );
+
+      if (firstDoseTime.isBefore(DateTime.now())) {
+        setState(() {
+          isSaving = false;
+          errorMessage = 'Cannot schedule a time in the past.';
+        });
+        return;
+      }
+
       final schedulesRef = FirebaseFirestore.instance
           .collection('users').doc(user.uid).collection('schedules');
 
       for (int day = 0; day < durationDays; day++) {
         for (int dose = 0; dose < timesPerDay; dose++) {
-          final hoursOffset = timesPerDay > 1 ? (dose * (24 ~/ timesPerDay)) : 0;
+          int spacing = 24 ~/ timesPerDay;
+          if (timesPerDay == 3 || timesPerDay == 4) {
+            spacing = 6;
+          } else if (timesPerDay == 2) {
+            spacing = 12;
+          }
+          final hoursOffset = timesPerDay > 1 ? (dose * spacing) : 0;
           final doseHour = (finalHour + hoursOffset) % 24;
           final doseTime = DateTime(
             selectedDate.year, selectedDate.month, selectedDate.day + day,
@@ -1686,7 +1738,9 @@ class _StandaloneSmartScheduleDialogState
                 body: 'Take your ${medicineController.text.trim()} now.',
                 scheduledDate: doseTime,
               );
-            } catch (_) {}
+            } catch (e) {
+              debugPrint('Failed to schedule notification: $e');
+            }
           }
         }
       }
@@ -1708,6 +1762,7 @@ class _StandaloneSmartScheduleDialogState
   @override
   Widget build(BuildContext context) {
     return Dialog(
+      backgroundColor: Colors.white,
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       child: ConstrainedBox(
@@ -1731,64 +1786,75 @@ class _StandaloneSmartScheduleDialogState
                 ],
               ),
               const SizedBox(height: 16),
-              Expanded(
+              Flexible(
+                fit: FlexFit.loose,
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Medicine',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 6),
-                      _box(child: TextField(
-                        controller: medicineController,
-                        decoration: const InputDecoration(
-                          border: InputBorder.none, isCollapsed: true,
-                          contentPadding: EdgeInsets.zero,
-                          hintText: 'Medicine name',
-                        ),
-                      )),
-                      const SizedBox(height: 4),
-                      // Choose from scan history
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => _pickFromScanHistory(),
-                          icon: const Icon(Icons.history, size: 16),
-                          label: const Text('Choose from scan history',
-                              style: TextStyle(fontSize: 13)),
-                          style: TextButton.styleFrom(
-                            foregroundColor: _primary,
-                            padding: EdgeInsets.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      const Text('Start Date',
+                      const Text('Select Date',
                           style: TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       GestureDetector(
                         onTap: () async {
                           final p = await showDatePicker(
-                            context: context,
-                            initialDate: selectedDate,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(const Duration(days: 365)),
-                          );
+  context: context,
+  initialDate: selectedDate,
+  firstDate: DateTime.now(),
+  lastDate: DateTime.now().add(const Duration(days: 365)),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,        // header + selected date
+          onPrimary: Colors.white,    // header text
+          surface: Colors.white,
+          onSurface: Colors.black,
+        ),
+        dialogBackgroundColor: Colors.white,
+      ),
+      child: child!,
+    );
+  },
+);
                           if (p != null) setState(() => selectedDate = p);
                         },
                         child: _staticBox(
                             '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
                       ),
                       const SizedBox(height: 14),
-                      const Text('First Dose Time',
+                      const Text('Scheduled Time',
                           style: TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       Row(children: [
                         _chip(hour.toString().padLeft(2, '0'), () async {
                           final p = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: hour, minute: minute));
+  context: context,
+  initialTime: TimeOfDay(hour: hour, minute: minute),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,        // selected hour/minute + header
+          onPrimary: Colors.white,
+          surface: Colors.white,
+          onSurface: Colors.black,
+        ),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: Colors.white,
+          hourMinuteTextColor: Colors.black,
+          hourMinuteColor: Colors.white,
+          dayPeriodTextColor: Colors.red,
+          dayPeriodColor: Colors.white,
+          dialBackgroundColor: Colors.white,
+          dialHandColor: Colors.red,
+          dialTextColor: Colors.black,
+        ),
+      ),
+      child: child!,
+    );
+  },
+);
                           if (p != null) setState(() {
                             hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
                             minute = p.minute;
@@ -1802,8 +1868,32 @@ class _StandaloneSmartScheduleDialogState
                         ),
                         _chip(minute.toString().padLeft(2, '0'), () async {
                           final p = await showTimePicker(
-                              context: context,
-                              initialTime: TimeOfDay(hour: hour, minute: minute));
+  context: context,
+  initialTime: TimeOfDay(hour: hour, minute: minute),
+  builder: (context, child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: Colors.red,        // selected hour/minute + header
+          onPrimary: Colors.white,
+          surface: Colors.white,
+          onSurface: Colors.black,
+        ),
+        timePickerTheme: const TimePickerThemeData(
+          backgroundColor: Colors.white,
+          hourMinuteTextColor: Colors.black,
+          hourMinuteColor: Colors.white,
+          dayPeriodTextColor: Colors.red,
+          dayPeriodColor: Colors.white,
+          dialBackgroundColor: Colors.white,
+          dialHandColor: Colors.red,
+          dialTextColor: Colors.black,
+        ),
+      ),
+      child: child!,
+    );
+  },
+);
                           if (p != null) setState(() {
                             hour = p.hourOfPeriod == 0 ? 12 : p.hourOfPeriod;
                             minute = p.minute;
@@ -1814,6 +1904,27 @@ class _StandaloneSmartScheduleDialogState
                         _chip(period, () => setState(
                             () => period = period == 'AM' ? 'PM' : 'AM')),
                       ]),
+                      const SizedBox(height: 14),
+                      const Text('Medicine',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      _box(child: TextField(
+                        controller: medicineController,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none, isCollapsed: true,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: 'Type medicine name',
+                        ),
+                      )),
+                      const SizedBox(height: 4),
+                      // Choose from scan history
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: () => _pickFromScanHistory(),
+                          child: const Text('Scan History'),
+                        ),
+                      ),
                       const SizedBox(height: 14),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,

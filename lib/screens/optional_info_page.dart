@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:medisafe/screens/home_page.dart';
-import '../colors/color.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'home_page.dart'; 
+import '../colors/color.dart'; 
 
 class OptionalInfoPage extends StatefulWidget {
   const OptionalInfoPage({super.key});
@@ -13,15 +13,13 @@ class OptionalInfoPage extends StatefulWidget {
 
 class _OptionalInfoPageState extends State<OptionalInfoPage> {
   final List<String> _allergies = [];
-  final List<String> _medicalHistory = [];
+  final List<Map<String, dynamic>> _medicalHistory = []; 
   
   bool _hasNoAllergies = false;
   bool _hasNoHistory = false;
 
   final TextEditingController _allergyController = TextEditingController();
   final TextEditingController _historyController = TextEditingController();
-  final TextEditingController _ageController = TextEditingController();
-  bool _hasNoAge = false;
 
   @override
   void initState() {
@@ -87,29 +85,70 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
   }
 
   Future<void> _navigateToHome({bool saveData = true}) async {
-  final user = FirebaseAuth.instance.currentUser;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
 
-  if (user != null && saveData) {
-    final updateData = <String, dynamic>{
-      'allergies': _hasNoAllergies ? [] : _allergies,
-      'medical_history': _hasNoHistory ? [] : _medicalHistory,
-    };
-    if (_ageController.text.isNotEmpty) {
-      updateData['age'] = int.tryParse(_ageController.text) ?? 0;
+    if (saveData) {
+      // Show loading indicator while saving
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
+      );
+
+      try {
+        final batch = FirebaseFirestore.instance.batch();
+        final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+
+        // Save Allergies if they exist
+        if (!_hasNoAllergies) {
+          for (var allergy in _allergies) {
+            var ref = userRef.collection('Allergies').doc(); 
+            batch.set(ref, {
+              'allergyName': allergy, 
+              'createdAt': FieldValue.serverTimestamp()
+            });
+          }
+        }
+
+        // Save Medical History if it exists
+        if (!_hasNoHistory) {
+          for (var history in _medicalHistory) {
+            var ref = userRef.collection('MedicalHistory').doc();
+            batch.set(ref, {
+              'diseaseName': history['name'],
+              'date': Timestamp.fromDate(history['date']), 
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+          }
+        }
+        
+        // Execute all saves at once
+        await batch.commit();
+      } catch (e) {
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Error saving data: $e")),
+          );
+        }
+        return;
+      }
+      
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+      }
     }
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .update(updateData);
+
+    if (mounted) {
+      Navigator.pushReplacement(
+        context, 
+        MaterialPageRoute(builder: (context) => const HomePage()),
+      );
+    }
   }
-
-  Navigator.pushAndRemoveUntil(
-    context,
-    MaterialPageRoute(builder: (context) => const HomePage()),
-    (route) => false,
-  );
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +156,6 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: AppColors.royalBlue,
-        elevation: 0,
         title: const Text("MediSafe", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         centerTitle: true,
         automaticallyImplyLeading: false, 
@@ -126,121 +164,201 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
         padding: const EdgeInsets.symmetric(horizontal: 25.0, vertical: 20),
         child: Column(
           children: [
-            const Text(
-              "Welcome to MediSafe!",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w500),
-            ),
+            const Text("Welcome to MediSafe!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w500)),
             const SizedBox(height: 15),
-
             _buildChatbotInfoBox(),
             const SizedBox(height: 25),
 
-            _buildSectionCard(
-              title: "What is your age?",
-              child: Column(
-                children: [
-                  if (!_hasNoAge) ...[
-                    TextField(
-                      controller: _ageController,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        hintText: "Enter your age",
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  _buildEmptyStatusLabel(
-                    "Prefer not to say", 
-                    _hasNoAge, 
-                    () => setState(() {
-                      _hasNoAge = !_hasNoAge;
-                      if (_hasNoAge) _ageController.clear(); 
-                    })
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
+            // ALLERGIES SECTION
             _buildSectionCard(
               title: "Any Allergies?",
               child: Column(
                 children: [
-                  // Only show input and list if "No Allergies" is NOT active
                   if (!_hasNoAllergies) ...[
-                    _buildAddInputField(_allergyController, "e.g. Peanuts", () {
-                      if (_allergyController.text.isNotEmpty) {
-                        setState(() { _allergies.add(_allergyController.text); });
+                    _buildAddInputField(
+                      _allergyController, 
+                      "e.g. Peanuts", 
+                      () {
+                        if (_allergyController.text.trim().isEmpty) {
+                          _showWarning("Please type an allergy first.");
+                          return;
+                        }
+                        setState(() { 
+                          _allergies.add(_allergyController.text.trim()); 
+                        });
                         _allergyController.clear();
-                      }
-                    }),
-                    ..._allergies.map((a) => _buildRemovableItem(a, () => setState(() => _allergies.remove(a)))),
-                    const SizedBox(height: 10),
+                      }, 
+                      isHistory: false,
+                    ),
+                    ..._allergies.map((a) => _buildRemovableItem(
+                      a, 
+                      null, 
+                      () => setState(() => _allergies.remove(a)),
+                    )),
                   ],
-                  
-                  // Updated Toggle Button with specific initial color
-                  _buildEmptyStatusLabel(
-                    "No Allergies", 
-                    _hasNoAllergies, 
-                    () => setState(() {
-                      _hasNoAllergies = !_hasNoAllergies;
-                      if (_hasNoAllergies) _allergies.clear(); 
-                    })
-                  ),
+                  const SizedBox(height: 10),
+                  _buildEmptyStatusLabel("No Allergies", _hasNoAllergies, () => setState(() {
+                    _hasNoAllergies = !_hasNoAllergies;
+                    if (_hasNoAllergies) _allergies.clear(); 
+                  })),
                 ],
               ),
             ),
 
             const SizedBox(height: 20),
 
+            // MEDICAL HISTORY SECTION
             _buildSectionCard(
               title: "Medical History",
               child: Column(
                 children: [
                   if (!_hasNoHistory) ...[
-                    _buildAddInputField(_historyController, "e.g. Hypertension", () {
-                      if (_historyController.text.isNotEmpty) {
-                        setState(() { _medicalHistory.add(_historyController.text); });
-                        _historyController.clear();
-                      }
-                    }),
-                    ..._medicalHistory.map((h) => _buildRemovableItem(h, () => setState(() => _medicalHistory.remove(h)))),
-                    const SizedBox(height: 10),
-                  ],
+                    _buildAddInputField(
+                      _historyController, 
+                      "e.g. Hypertension", 
+                      () async {
+                        if (_historyController.text.trim().isEmpty) {
+                          _showWarning("Please type a condition first.");
+                          return;
+                        }
 
-                  _buildEmptyStatusLabel(
-                    "No Medical History", 
-                    _hasNoHistory, 
-                    () => setState(() {
-                      _hasNoHistory = !_hasNoHistory;
-                      if (_hasNoHistory) _medicalHistory.clear(); 
-                    })
-                  ),
+                        final String name = _historyController.text.trim();
+                        final DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime(1900),
+                          lastDate: DateTime.now(),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: ColorScheme.light(
+                                  primary: AppColors.royalBlue, // Themed to your app
+                                  onPrimary: Colors.white,
+                                  onSurface: Colors.black,
+                                ),
+                                dialogBackgroundColor: Colors.white,
+                              ),
+                              child: child!,
+                            );
+                          },
+                        );
+
+                        if (picked != null) {
+                          setState(() {
+                            _medicalHistory.add({
+                              "name": name,
+                              "date": picked, 
+                            });
+                            _historyController.clear();
+                          });
+                        }
+                      }, 
+                      isHistory: true,
+                    ),
+                    ..._medicalHistory.map((h) => _buildRemovableItem(
+                      h['name']!, 
+                      h['date'] as DateTime, 
+                      () => setState(() => _medicalHistory.remove(h))
+                    )),
+                  ],
+                  const SizedBox(height: 10),
+                  _buildEmptyStatusLabel("No Medical History", _hasNoHistory, () => setState(() {
+                    _hasNoHistory = !_hasNoHistory;
+                    if (_hasNoHistory) _medicalHistory.clear(); 
+                  })),
                 ],
               ),
             ),
 
             const SizedBox(height: 40),
-
-            _buildPrimaryButton(
-             "Save and Continue",
-           AppColors.royalBlue,
-           Colors.white,
-             () => _navigateToHome(saveData: true),
-            ),
+            _buildPrimaryButton("Save and Continue", AppColors.royalBlue, Colors.white, () => _navigateToHome(saveData: true)),
             const SizedBox(height: 15),
-            _buildPrimaryButton(
-             "Skip for now",
-           Colors.white,
-           AppColors.royalBlue,
-             () => _navigateToHome(saveData: false),
-             isBordered: true,
-          ),
-            const SizedBox(height: 30),
+            _buildPrimaryButton("Skip for now", Colors.white, AppColors.royalBlue, () => _navigateToHome(saveData: false), isBordered: true),
           ],
+        ),
+      ),
+    );
+  }
+
+  // --- WIDGET BUILDERS ---
+
+  Widget _buildRemovableItem(String title, DateTime? date, VoidCallback onRemove) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD1E3F8),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: AppColors.royalBlue),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
+                if (date != null)
+                  Text("${date.day}/${date.month}/${date.year}", style: const TextStyle(color: Colors.black54, fontSize: 11)),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent), 
+            onPressed: onRemove,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionCard({required String title, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20), 
+        border: Border.all(color: AppColors.royalBlue, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, 
+        children: [
+          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Divider(thickness: 1.2, color: AppColors.royalBlue),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddInputField(TextEditingController ctrl, String hint, VoidCallback onAdd, {required bool isHistory}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFD1E3F8), 
+        borderRadius: BorderRadius.circular(15), 
+        border: Border.all(color: AppColors.royalBlue),
+      ),
+      child: TextField(
+        controller: ctrl,
+        decoration: InputDecoration(
+          hintText: hint,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+          border: InputBorder.none,
+          suffixIcon: Row(
+            mainAxisSize: MainAxisSize.min, 
+            children: [
+              if (isHistory)
+                IconButton(
+                  icon: const Icon(Icons.calendar_today, size: 20, color: Colors.black54),
+                  onPressed: onAdd,
+                ),
+              IconButton(
+                icon: Icon(Icons.add_circle, color: AppColors.royalBlue), 
+                onPressed: onAdd,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -250,125 +368,16 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(15),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        width: double.infinity,
+      child: Container(
+        width: double.infinity, 
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isActive ? AppColors.royalBlue : const Color(0xFF6A9BDB), 
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: AppColors.royalBlue, width: 1),
-          boxShadow: isActive ? [
-            BoxShadow(
-              color: AppColors.royalBlue.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            )
-          ] : [],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (isActive) ...[
-              const Icon(Icons.check_circle, color: Colors.white, size: 20),
-              const SizedBox(width: 10),
-            ],
-            Text(
-              text,
-              style: const TextStyle(
-                color: Colors.white, 
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ],
+        child: Center(
+          child: Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ),
-      ),
-    );
-  }
-
-  Widget _buildAddInputField(TextEditingController ctrl, String hint, VoidCallback onAdd) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFD1E3F8),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.royalBlue),
-      ),
-      child: TextField(
-        controller: ctrl,
-        style: const TextStyle(color: Colors.black), 
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(color: Colors.grey.withOpacity(0.6)), 
-          contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-          border: InputBorder.none,
-          suffixIcon: IconButton(icon: const Icon(Icons.add, color: Colors.black), onPressed: onAdd),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRemovableItem(String text, VoidCallback onRemove) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFD1E3F8),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: AppColors.royalBlue),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(text, style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w500)),
-          GestureDetector(onTap: onRemove, child: const Icon(Icons.remove, color: Colors.black)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChatbotInfoBox() {
-    return Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        Container(
-          margin: const EdgeInsets.only(left: 40),
-          padding: const EdgeInsets.fromLTRB(50, 15, 20, 15),
-          decoration: BoxDecoration(
-            color: const Color(0xFFD1E3F8), 
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppColors.royalBlue),
-          ),
-          child: const Text(
-            "You may choose to enter your medication details now or complete them later.",
-            style: TextStyle(fontSize: 13, height: 1.3),
-          ),
-        ),
-        Container(
-          height: 80, width: 80,
-          decoration: BoxDecoration(
-            color: Colors.white, shape: BoxShape.circle,
-            border: Border.all(color: AppColors.royalBlue),
-            image: const DecorationImage(image: AssetImage('assets/images/chatbot_logo.png'), fit: BoxFit.contain),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionCard({required String title, required Widget child}) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.royalBlue, width: 1)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w400)),
-          const Divider(thickness: 1, color: AppColors.royalBlue),
-          const SizedBox(height: 10),
-          child,
-        ],
       ),
     );
   }
@@ -379,14 +388,49 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
       child: ElevatedButton(
         onPressed: action,
         style: ElevatedButton.styleFrom(
-          backgroundColor: bg, elevation: 0,
+          backgroundColor: bg, 
           padding: const EdgeInsets.symmetric(vertical: 15),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-            side: isBordered ? const BorderSide(color: AppColors.royalBlue, width: 1.5) : BorderSide.none,
+            borderRadius: BorderRadius.circular(30), 
+            side: isBordered ? BorderSide(color: AppColors.royalBlue) : BorderSide.none,
           ),
         ),
         child: Text(label, style: TextStyle(color: text, fontSize: 18, fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  Widget _buildChatbotInfoBox() {
+    return Stack(
+      alignment: Alignment.centerLeft, 
+      children: [
+        Container(
+          margin: const EdgeInsets.only(left: 40), 
+          padding: const EdgeInsets.fromLTRB(50, 15, 20, 15),
+          decoration: BoxDecoration(
+            color: const Color(0xFFD1E3F8), 
+            borderRadius: BorderRadius.circular(20), 
+            border: Border.all(color: AppColors.royalBlue),
+          ),
+          child: const Text("Providing your medical details helps MediSafe customize your care!", style: TextStyle(fontSize: 13)),
+        ),
+        const CircleAvatar(
+          radius: 35, 
+          backgroundColor: Colors.white, 
+          backgroundImage: AssetImage('assets/images/chatbot_logo.png'),
+        ),
+      ],
+    );
+  }
+
+
+  void _showWarning(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
       ),
     );
   }
