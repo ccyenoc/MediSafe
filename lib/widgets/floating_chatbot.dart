@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:medisafe/screens/chatbot_page.dart';
 import '../colors/color.dart';
 import '../services/gemini_service.dart';
@@ -7,12 +9,14 @@ class FloatingChatbot extends StatefulWidget {
   final List<Message> messages;
   final TextEditingController controller;
   final GeminiService geminiService;
+  final String? sessionId;
 
   const FloatingChatbot({
     super.key,
     required this.messages,
     required this.controller,
     required this.geminiService,
+    this.sessionId,
   });
 
   @override
@@ -21,26 +25,109 @@ class FloatingChatbot extends StatefulWidget {
 
 class _FloatingChatbotState extends State<FloatingChatbot> {
   bool _isTyping = false;
+  String? _currentSessionId;
+
+  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _currentSessionId = widget.sessionId;
+    if (_currentSessionId != null) {
+      _loadSessionMessages(_currentSessionId!);
+    }
+  }
+
+  Future<void> _loadSessionMessages(String sessionId) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('chat_sessions')
+          .doc(sessionId)
+          .collection('messages')
+          .orderBy('timestamp')
+          .get();
+      setState(() {
+        widget.messages.clear();
+        for (final doc in snap.docs) {
+          final data = doc.data();
+          widget.messages.add(Message(
+            text: data['text'] ?? '',
+            isUser: data['isUser'] == true,
+          ));
+        }
+      });
+    } catch (_) {}
+  }
+
+  Future<String> _ensureSessionExists(String firstMessageText) async {
+    if (_currentSessionId != null) return _currentSessionId!;
+
+    final sessionTitle = firstMessageText.length > 40
+        ? '${firstMessageText.substring(0, 40)}…'
+        : firstMessageText;
+
+    final ref = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .collection('chat_sessions')
+        .add({
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastUpdated': FieldValue.serverTimestamp(),
+          'title': sessionTitle,
+        });
+
+    _currentSessionId = ref.id;
+    return _currentSessionId!;
+  }
+
+  Future<void> _saveMessage(Message msg) async {
+    if (_currentSessionId == null || _uid.isEmpty) return;
+    try {
+      final sessRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('chat_sessions')
+          .doc(_currentSessionId);
+
+      await sessRef.collection('messages').add({
+        'text': msg.text,
+        'isUser': msg.isUser,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      await sessRef.update({'lastUpdated': FieldValue.serverTimestamp()});
+    } catch (_) {}
+  }
 
   Future<void> _sendMessage() async {
     final text = widget.controller.text.trim();
     if (text.isEmpty) return;
 
+    final userMsg = Message(text: text, isUser: true);
     setState(() {
-      widget.messages.add(Message(text: text, isUser: true));
+      widget.messages.add(userMsg);
       _isTyping = true;
       widget.controller.clear();
     });
 
+    // Ensure session exists and save user message
+    await _ensureSessionExists(text);
+    await _saveMessage(userMsg);
+
     try {
       final reply = await widget.geminiService.sendMessage(text);
       if (mounted) {
-        setState(() => widget.messages.add(Message(text: reply, isUser: false)));
+        final botMsg = Message(text: reply, isUser: false);
+        setState(() => widget.messages.add(botMsg));
+        await _saveMessage(botMsg);
       }
     } catch (_) {
       if (mounted) {
-        setState(() => widget.messages.add(
-            Message(text: "Sorry, I couldn't process that.", isUser: false)));
+        final errorMsg = Message(
+            text: "Sorry, I couldn't process that.", isUser: false);
+        setState(() => widget.messages.add(errorMsg));
+        await _saveMessage(errorMsg);
       }
     } finally {
       if (mounted) setState(() => _isTyping = false);
@@ -65,7 +152,8 @@ class _FloatingChatbotState extends State<FloatingChatbot> {
               child: Align(
                 alignment: Alignment.topLeft,
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.black, size: 30),
+                  icon: const Icon(Icons.arrow_back,
+                      color: Colors.black, size: 30),
                   onPressed: () => Navigator.pop(context),
                 ),
               ),
@@ -103,16 +191,19 @@ class _FloatingChatbotState extends State<FloatingChatbot> {
                           ),
                         )
                       : IconButton(
-                          icon: const Icon(Icons.send, color: AppColors.royalBlue),
+                          icon: const Icon(Icons.send,
+                              color: AppColors.royalBlue),
                           onPressed: _sendMessage,
                         ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30),
-                    borderSide: const BorderSide(color: AppColors.royalBlue),
+                    borderSide:
+                        const BorderSide(color: AppColors.royalBlue),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30),
-                    borderSide: const BorderSide(color: AppColors.royalBlue, width: 2),
+                    borderSide: const BorderSide(
+                        color: AppColors.royalBlue, width: 2),
                   ),
                 ),
               ),
