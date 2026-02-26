@@ -102,7 +102,7 @@ class MedicineInfoPage extends StatelessWidget {
                       onPressed: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const ChatbotPage(),
+                          builder: (_) => ChatbotPage(medicine: medicine),
                         ),
                       ),
                       icon: const Icon(Icons.chat_bubble_outline, size: 18),
@@ -521,6 +521,19 @@ class _SmartScheduleDialogState extends State<_SmartScheduleDialog> {
       if (period == 'PM' && hour != 12) finalHour += 12;
       if (period == 'AM' && hour == 12) finalHour = 0;
 
+      final firstDoseTime = DateTime(
+        selectedDate.year,
+        selectedDate.month,
+        selectedDate.day,
+        finalHour,
+        minute,
+      );
+
+      if (firstDoseTime.isBefore(DateTime.now())) {
+        setState(() => errorMessage = 'Cannot schedule a time in the past.');
+        return;
+      }
+
       final schedulesRef = FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -529,8 +542,14 @@ class _SmartScheduleDialogState extends State<_SmartScheduleDialog> {
       // Create entries: durationDays × timesPerDay documents
       for (int day = 0; day < durationDays; day++) {
         for (int dose = 0; dose < timesPerDay; dose++) {
-          // Spread doses evenly across the day
-          final hoursOffset = timesPerDay > 1 ? (dose * (24 ~/ timesPerDay)) : 0;
+          // Spread doses based on common intervals
+          int spacing = 24 ~/ timesPerDay;
+          if (timesPerDay == 3 || timesPerDay == 4) {
+            spacing = 6;
+          } else if (timesPerDay == 2) {
+            spacing = 12;
+          }
+          final hoursOffset = timesPerDay > 1 ? (dose * spacing) : 0;
           final doseHour = (finalHour + hoursOffset) % 24;
 
           final doseTime = DateTime(

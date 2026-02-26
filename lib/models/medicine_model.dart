@@ -33,8 +33,16 @@ class MedicineModel {
       recipients: List<String>.from(json['recipients'] ?? []),
       contraindications: List<String>.from(json['contraindications'] ?? []),
       allergies: List<String>.from(json['allergies'] ?? []),
-      personalizedWarning: json['personalizedWarning'] ?? '',
+      personalizedWarning: _parseWarning(json['personalizedWarning']),
     );
+  }
+
+  /// Handles personalizedWarning being a String OR a List (AI sometimes returns a list)
+  static String _parseWarning(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is List) return value.map((e) => e.toString()).join('\n');
+    return value.toString();
   }
 
   Map<String, dynamic> toJson() {

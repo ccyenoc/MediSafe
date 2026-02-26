@@ -91,11 +91,43 @@ class FirestoreService {
     return _firestore.collection('users').doc(uid).snapshots();
   }
 
-  /// One-time profile fetch for AI use
+  /// One-time profile fetch for AI use — reads parent doc + sub-collections
   Future<Map<String, dynamic>?> getUserProfileOnce() async {
-    final doc = await _firestore.collection('users').doc(uid).get();
-    return doc.data();
+    final userRef = _firestore.collection('users').doc(uid);
+    final doc = await userRef.get();
+    if (!doc.exists) return null;
+
+    final data = Map<String, dynamic>.from(doc.data() ?? {});
+
+    // Fetch MedicalHistory sub-collection (saved by optional_info_page)
+    try {
+      final historySnap = await userRef.collection('MedicalHistory').get();
+      final conditions = historySnap.docs
+          .map((d) => d.data()['diseaseName']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+      // Merge with any existing top-level medical_history array (older saves)
+      final existing = List<String>.from(data['medical_history'] ?? []);
+      final merged = {...existing, ...conditions}.toList();
+      data['medical_history'] = merged;
+    } catch (_) {}
+
+    // Fetch Allergies sub-collection (saved by optional_info_page)
+    try {
+      final allergySnap = await userRef.collection('Allergies').get();
+      final allergies = allergySnap.docs
+          .map((d) => d.data()['allergyName']?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+      // Merge with any existing top-level allergies array (older saves)
+      final existing = List<String>.from(data['allergies'] ?? []);
+      final merged = {...existing, ...allergies}.toList();
+      data['allergies'] = merged;
+    } catch (_) {}
+
+    return data;
   }
+
 
   /// ==========================
   /// AGE METHOD

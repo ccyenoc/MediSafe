@@ -91,48 +91,88 @@ class _NearMePageState extends State<NearMePage> {
     }
   }
 
-  Future<void> _searchNearbyPlaces(String type) async {
+  Future<void> _searchNearbyPlaces(String filter) async {
     if (_currentPosition == null) return;
-    final apiKey = dotenv.env['VISION_API_KEY'] ?? dotenv.env['GEMINI_API_KEY']; // Using existing API key from env
-    if (apiKey == null) return;
+    
+    final apiKey = dotenv.env['GOOGLE_MAPS_API_KEY']; 
+    if (apiKey == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Maps API Key missing! Check your .env file.")));
+      return;
+    }
 
-    final url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?"
+    final baseUrl = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?"
         "location=${_currentPosition!.latitude},${_currentPosition!.longitude}"
         "&radius=5000"
-        "&type=$type"
         "&key=$apiKey";
 
+    List<String> searchUrls = [];
+    
+    if (filter == "clinic") {
+      searchUrls.add("$baseUrl&keyword=clinic");
+      searchUrls.add("$baseUrl&keyword=klinik"); 
+    } else if (filter == "pharmacy") {
+      searchUrls.add("$baseUrl&type=pharmacy"); 
+      searchUrls.add("$baseUrl&keyword=farmasi"); 
+    } else {
+      searchUrls.add("$baseUrl&type=$filter"); 
+    }
+
     try {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Searching for $type at ${_currentPosition!.latitude}, ${_currentPosition!.longitude} with key ends in ${apiKey.substring(apiKey.length - 4)}")));
-      final response = await http.get(Uri.parse(url));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final results = data['results'] as List;
-
-        Set<Marker> newMarkers = {};
-        for (var place in results) {
-          final lat = place['geometry']['location']['lat'];
-          final lng = place['geometry']['location']['lng'];
-          final name = place['name'];
-          
-          // Determine color based on type
-          double hue = BitmapDescriptor.hueBlue;
-          if (type == "hospital") hue = BitmapDescriptor.hueRose;
-          if (type == "clinic") hue = BitmapDescriptor.hueGreen;
-          if (type == "pharmacy") hue = BitmapDescriptor.hueAzure;
-          
-          newMarkers.add(Marker(
-            markerId: MarkerId(place['place_id']),
-            position: LatLng(lat, lng),
-            infoWindow: InfoWindow(title: name),
-            icon: BitmapDescriptor.defaultMarkerWithHue(hue),
-          ));
-        }
-
-        setState(() {
-          _placeMarkers = newMarkers;
-        });
+      if (mounted) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Searching for $filter...")));
       }
+      
+      // Run all API requests simultaneously for maximum speed
+      final responses = await Future.wait(
+        searchUrls.map((url) => http.get(Uri.parse(url)))
+      );
+      
+      Set<Marker> newMarkers = {};
+      Set<String> seenPlaceIds = {}; // Keeps track of places so we don't add duplicates
+
+      for (var response in responses) {
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          final results = data['results'] as List;
+
+          for (var place in results) {
+            if (place['geometry'] == null || place['geometry']['location'] == null) continue;
+
+            final placeId = place['place_id'];
+            
+            if (seenPlaceIds.contains(placeId)) continue;
+            seenPlaceIds.add(placeId);
+
+            final lat = place['geometry']['location']['lat'];
+            final lng = place['geometry']['location']['lng'];
+            final name = place['name'];
+            final address = place['vicinity'] ?? ''; 
+            
+            // Determine color based on filter
+            double hue = BitmapDescriptor.hueBlue;
+            if (filter == "hospital") hue = BitmapDescriptor.hueRose;
+            if (filter == "clinic") hue = BitmapDescriptor.hueGreen;
+            if (filter == "pharmacy") hue = BitmapDescriptor.hueAzure;
+            
+            newMarkers.add(Marker(
+              markerId: MarkerId(placeId),
+              position: LatLng(lat, lng),
+              infoWindow: InfoWindow(
+                title: name,
+                snippet: address, 
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+            ));
+          }
+        } else {
+          print("API Error: ${response.statusCode}");
+        }
+      }
+
+      setState(() {
+        _placeMarkers = newMarkers;
+      });
+      
     } catch (e) {
       print("Error fetching places: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
