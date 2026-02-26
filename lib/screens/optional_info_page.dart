@@ -44,12 +44,12 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
           
           setState(() {
             // Update age
-            if (age != null && age > 0) {
-              _ageController.text = age.toString();
-              _hasNoAge = false;
-            } else {
-              _hasNoAge = true;
-            }
+            // if (age != null && age > 0) {
+            //   _ageController.text = age.toString();
+            //   _hasNoAge = false;
+            // } else {
+            //   _hasNoAge = true;
+            // }
             
             // Update allergies
             if (allergies != null && allergies.isNotEmpty) {
@@ -63,7 +63,25 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
             // Update medical history
             if (medicalHistory != null && medicalHistory.isNotEmpty) {
               _medicalHistory.clear();
-              _medicalHistory.addAll(medicalHistory.cast<String>());
+              _medicalHistory.addAll(
+                medicalHistory
+                    .whereType<Map<String, dynamic>>()
+                    .map((item) {
+                      final name = item['name'];
+                      final date = item['date'];
+                      if (name is! String) return null;
+                      final parsedDate = date is Timestamp
+                          ? date.toDate()
+                          : (date is DateTime ? date : null);
+                      if (parsedDate == null) return null;
+                      return {
+                        'name': name,
+                        'date': parsedDate,
+                      };
+                    })
+                    .whereType<Map<String, dynamic>>()
+                    .toList(),
+              );
               _hasNoHistory = false;
             } else {
               _hasNoHistory = true;
@@ -80,7 +98,7 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
   void dispose() {
     _allergyController.dispose();
     _historyController.dispose();
-    _ageController.dispose();
+    // _ageController.dispose();
     super.dispose();
   }
 

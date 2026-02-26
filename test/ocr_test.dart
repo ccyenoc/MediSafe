@@ -14,7 +14,7 @@ void main() {
     for (var photo in photos) {
       if (!photo.path.toUpperCase().endsWith('.JPG')) continue;
       print('\n======================================================');
-      print('📷 \${photo.path.split('/').last}');
+      print('📷 ${photo.path.split('/').last}');
       print('======================================================');
       
       try {
@@ -22,7 +22,7 @@ void main() {
         final result = await recognizer.processImage(inputImage);
         print(result.text.isEmpty ? "(No text found)" : result.text);
       } catch (e) {
-        print('ERROR: \$e');
+        print('ERROR: $e');
       }
     }
   });
