@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb; 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:medisafe/screens/chatbot_page.dart';
 import 'package:medisafe/screens/login_page.dart';
 import 'package:medisafe/screens/near_me.dart';
 import 'package:medisafe/screens/notification_page.dart';
@@ -179,10 +180,12 @@ class _SettingsPageState extends State<SettingsPage> {
           _menuItem("About Us", onTap: () => _showAboutUsDialog()),
           const Divider(height: 1, color: AppColors.royalBlue),
           _menuItem("Log Out", trailing: IconButton(icon: const Icon(Icons.logout, color: Colors.black), onPressed: () async {
+            print('[AUTH] Signing out user');
             await FirebaseAuth.instance.signOut();
-            if(mounted) {
-              Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false);
-            }
+            print('[AUTH] ✅ User signed out');
+//             if (mounted) {
+//               Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false);
+//             }
           })),
           const Divider(height: 1, color: AppColors.royalBlue),
           _menuItem("Delete Account", onTap: _showDeleteAccountDialog),
@@ -359,6 +362,105 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _deleteAccountPermanently(BuildContext dialogContext) async {
+    // Close the confirmation dialog first
+    Navigator.pop(dialogContext);
+    
+    // Show loading dialog
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (loadingContext) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            CircularProgressIndicator(),
+            SizedBox(height: 20),
+            Text("Deleting account..."),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      
+      if (user != null) {
+        // Step 1: Delete Firestore document
+        print('[DELETE] Deleting Firestore user document for uid: ${user.uid}');
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .delete();
+        print('[DELETE] ✅ Firestore document deleted');
+
+        // Step 2: Delete Firebase Auth account
+        print('[DELETE] Deleting Firebase Auth account for uid: ${user.uid}');
+        await user.delete();
+        print('[DELETE] ✅ Firebase Auth account deleted');
+
+        // Close loading dialog and navigate to login
+        if (mounted) {
+          Navigator.pop(context); // Close loading dialog
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+            (route) => false,
+          );
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account deleted successfully'),
+              duration: Duration(seconds: 2),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        print('[DELETE] ❌ Auth deletion error: ${e.code} - ${e.message}');
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting account: ${e.message}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        print('[DELETE] ❌ Firestore deletion error: ${e.code} - ${e.message}');
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting data: ${e.message}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        print('[DELETE] ❌ Unexpected error: $e');
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unexpected error: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildGridItem(IconData icon, String label, VoidCallback onTap) {

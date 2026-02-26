@@ -21,6 +21,69 @@ class _OptionalInfoPageState extends State<OptionalInfoPage> {
   final TextEditingController _allergyController = TextEditingController();
   final TextEditingController _historyController = TextEditingController();
 
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    
+    if (user != null) {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        
+        if (userDoc.exists) {
+          final age = userDoc.data()?['age'];
+          final allergies = userDoc.data()?['allergies'] as List<dynamic>?;
+          final medicalHistory = userDoc.data()?['medical_history'] as List<dynamic>?;
+          
+          setState(() {
+            // Update age
+            if (age != null && age > 0) {
+              _ageController.text = age.toString();
+              _hasNoAge = false;
+            } else {
+              _hasNoAge = true;
+            }
+            
+            // Update allergies
+            if (allergies != null && allergies.isNotEmpty) {
+              _allergies.clear();
+              _allergies.addAll(allergies.cast<String>());
+              _hasNoAllergies = false;
+            } else {
+              _hasNoAllergies = true;
+            }
+            
+            // Update medical history
+            if (medicalHistory != null && medicalHistory.isNotEmpty) {
+              _medicalHistory.clear();
+              _medicalHistory.addAll(medicalHistory.cast<String>());
+              _hasNoHistory = false;
+            } else {
+              _hasNoHistory = true;
+            }
+          });
+        }
+      } catch (e) {
+        print('Error loading user data: $e');
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _allergyController.dispose();
+    _historyController.dispose();
+    _ageController.dispose();
+    super.dispose();
+  }
+
   Future<void> _navigateToHome({bool saveData = true}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
