@@ -1454,16 +1454,69 @@ Widget _scheduleSectionFromData(
                                               child: const Text('Details'),
                                             ),
                                             TextButton(
-                                              onPressed: () {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                  const SnackBar(
+                                              onPressed: () async {
+                                                final confirm =
+                                                    await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (ctx) =>
+                                                      AlertDialog(
+                                                    title: const Text(
+                                                        'Delete schedule?'),
                                                     content: Text(
-                                                        'Delete coming soon.'),
-                                                    duration:
-                                                        Duration(seconds: 1),
+                                                        'Remove "$medicineName" from this slot?'),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                                ctx, false),
+                                                        child: const Text(
+                                                            'Cancel'),
+                                                      ),
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                                ctx, true),
+                                                        child: const Text(
+                                                            'Delete',
+                                                            style: TextStyle(
+                                                                color: Colors
+                                                                    .red)),
+                                                      ),
+                                                    ],
                                                   ),
                                                 );
+
+                                                if (confirm == true) {
+                                                  await FirebaseFirestore
+                                                      .instance
+                                                      .collection('users')
+                                                      .doc(FirebaseAuth
+                                                          .instance
+                                                          .currentUser!
+                                                          .uid)
+                                                      .collection('schedules')
+                                                      .doc(docId)
+                                                      .delete();
+
+                                                  await NotificationService()
+                                                      .cancelNotification(
+                                                          docId.hashCode);
+
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                            context)
+                                                        .showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                            'Schedule deleted.'),
+                                                        backgroundColor:
+                                                            Colors.green,
+                                                        duration: Duration(
+                                                            seconds: 1),
+                                                      ),
+                                                    );
+                                                  }
+                                                }
                                               },
                                               style: TextButton.styleFrom(
                                                 padding:
