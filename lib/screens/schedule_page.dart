@@ -1738,7 +1738,9 @@ class _StandaloneSmartScheduleDialogState
                 body: 'Take your ${medicineController.text.trim()} now.',
                 scheduledDate: doseTime,
               );
-            } catch (_) {}
+            } catch (e) {
+              debugPrint('Failed to schedule notification: $e');
+            }
           }
         }
       }
