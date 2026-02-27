@@ -212,7 +212,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
           return Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
-            child: Padding(
+            child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
