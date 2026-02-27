@@ -14,7 +14,7 @@
 [![Gemini AI](https://img.shields.io/badge/Google_Gemini-8E75B2?style=for-the-badge&logo=google-gemini&logoColor=white)](#)
 [![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge&logo=dart&logoColor=white)](#)
 
-*Your intelligent companion for safe medication understanding and daily adherence.*
+Your intelligent companion for safe medication understanding and daily adherence.
 
 </div>
 
