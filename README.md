@@ -18,14 +18,14 @@
 
 </div>
 
----
+--
 
 ## 🧩 Overview
 
 MediSafe is a mobile AI-powered medication companion designed to **reduce medication misuse** and **improve treatment adherence**.  
 By combining on-device OCR with cloud-based AI reasoning, MediSafe helps users understand medicines in simple language, receive personalized safety warnings, and follow correct dosing schedules.
 
----
+--
 
 ## 🛠 Technical Architecture
 
@@ -43,7 +43,7 @@ MediSafe is built with a privacy-conscious, modular architecture optimized for m
 | **⚙️ Environment Management** | `flutter_dotenv` (secure `.env` loading at startup) |
 | **📍 Geolocation** | `geolocator` + `geocoding` via `LocationService` |
 
----
+--
 
 ### 2. Core Architecture Patterns
 
