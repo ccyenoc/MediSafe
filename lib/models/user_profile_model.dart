@@ -17,13 +17,21 @@ class UserProfileModel {
 
   factory UserProfileModel.fromFirestore(Map<String, dynamic> data) {
     final location = data['location'] as Map<String, dynamic>? ?? {};
+    
+    int parsedAge = 0;
+    if (data['age'] is int) {
+      parsedAge = data['age'];
+    } else if (data['age'] != null) {
+      parsedAge = int.tryParse(data['age'].toString()) ?? 0;
+    }
+
     return UserProfileModel(
-      username: data['username'] ?? '',
-      age: (data['age'] ?? 0) as int,
+      username: data['username']?.toString() ?? '',
+      age: parsedAge,
       allergies: List<String>.from(data['allergies'] ?? []),
       medicalHistory: List<String>.from(data['medical_history'] ?? []),
-      city: location['city'] ?? '',
-      country: location['country'] ?? '',
+      city: location['city']?.toString() ?? '',
+      country: location['country']?.toString() ?? '',
     );
   }
 

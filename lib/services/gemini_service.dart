@@ -96,14 +96,13 @@ FIELD-BY-FIELD RULES (follow strictly):
 
 "allergies": List the actual chemical ingredients that could cause allergic reactions. Name them. E.g. "Sodium Citrate", "Citric Acid", "Tartaric Acid", "Sodium Bicarbonate". Do NOT say "allergic to any ingredient" — that is useless.
 
-"personalizedWarning": IMPORTANT — You MUST check the [USER PROFILE] section above before filling this field.
-Generate SHORT bullet-point warnings. Each bullet max 15 words. Only include a bullet if it genuinely applies. Rules:
-1. EXPIRY — ONLY if you clearly read a date in the image/OCR ("EXP", "Expiry", "Best Before", "Use By") with HIGH confidence. If expired vs today (${DateTime.now().year}): "⚠️ Expired: [Date] — do not take.". If still valid: "📅 Expires: [Date].". If date is NOT clearly visible/readable, say NOTHING about expiry.
-2. ALLERGY — Cross-check this medicine's ingredients against 'Known allergies' in the user profile. If there's a match: "🚨 Allergy alert: contains [ingredient] — avoid."
-3. MEDICAL HISTORY — Cross-check 'Medical history / conditions' from the user profile against known contraindications for this medicine. Examples: paracetamol+liver disease, NSAIDs/decongestants/cold medicine+hypertension/high blood pressure, aspirin+bleeding disorders, steroids+diabetes, antihistamines+enlarged prostate. If a conflict exists: "⚠️ Caution: [medicine name] is not ideal if you have [condition] — consult your doctor."
+"personalizedWarning": CRITICAL — You MUST check the [USER PROFILE] section above before filling this field. Prioritize MEDICAL HISTORY and ALLERGIES above all else.
+Generate SHORT bullet-point warnings. Each bullet max 15 words. Only include a bullet if it genuinely applies. Rules (in priority order):
+1. MEDICAL HISTORY — STRICTLY cross-check 'Medical history / conditions' from the user profile against known contraindications for this medicine. For example, if user has hypertension/high blood pressure and the medicine contains NSAIDs/decongestants/pseudophedrine or high sodium, you MUST output: "⚠️ Caution: Not suitable if you have [condition] — consult doctor."
+2. ALLERGY — STRICTLY cross-check this medicine's ingredients against 'Known allergies'. If matched: "🚨 Allergy alert: Contains [ingredient] — avoid."
+3. EXPIRY — If you clearly read a date in the image/OCR ("EXP", "Expiry", "Best Before", "Use By") with HIGH confidence. If expired vs today (\${DateTime.now().year}): "⚠️ Expired: [Date] — do not take.". If still valid: "📅 Expires: [Date].". If date is NOT clearly visible/readable, say NOTHING about expiry.
 4. AGE — If user age makes this medicine unsuitable: "⚠️ Age caution: [brief reason]."
-5. FOOD — From your pharmaceutical knowledge about THIS specific medicine, name the foods/drinks that are known to interact with it. Always include this if any exist. Format: "🍽️ Avoid with this medicine: [specific items, e.g. alcohol, grapefruit juice, high-fat meals, dairy products, caffeine]."
-6. DRUG — From your pharmaceutical knowledge about THIS specific medicine, name common drug classes or supplements known to interact with it. Always include this if any exist. Format: "💊 Don't combine with: [specific items, e.g. blood thinners, MAOIs, antacids, traditional herbal supplements, other NSAIDs]."
+5. FOOD — From your pharmaceutical knowledge about THIS specific medicine, name the foods/drinks that are known to interact with it. Always include this if any exist. Format: "🍽️ Avoid with this medicine: [specific items, e.g. alcohol, grapefruit juice, high-fat meals, dairy products, caffeine]." If no specific food interacts, do NOT include this bullet.
 If none apply, return "". Use bullet points only. No generic advice. No paragraphs.
 
 GENERAL RULES:
@@ -263,7 +262,7 @@ Return a JSON schedule suggestion:
 {"timesPerDay": 3, "durationDays": 5, "suggestedTimes": ["08:00","14:00","20:00"], "notes": "Take with food"}
 Rules:
 - timesPerDay: integer 1-4 only.
-- durationDays: integer 1-90 only. Try to determine how many days this medicine should be taken based on the dosage text. If it is an antibiotic, it is usually 5-7 days. If a chronic medication (like blood pressure), it might be 30 days. If the text says e.g., "for 14 days", use 14. If unclear, provide a reasonable default like 5. 
+- durationDays: integer 1-90 only. Try to determine how many days this medicine should be taken based on the dosage text. If it is an antibiotic, it is usually 5-7 days. If a chronic medication (like blood pressure), it might be 30 days. If the text says e.g., "for 14 days", use 14. If unclear, provide a reasonable default like 3. 
 - Return ONLY valid JSON, nothing else.''';
 
     try {

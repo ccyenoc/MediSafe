@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 class FirestoreService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -110,7 +111,10 @@ class FirestoreService {
       final existing = List<String>.from(data['medical_history'] ?? []);
       final merged = {...existing, ...conditions}.toList();
       data['medical_history'] = merged;
-    } catch (_) {}
+      debugPrint('FIRESTORE FETCHED HISTORY: $merged');
+    } catch (e) {
+      debugPrint('FIRESTORE HISTORY FETCH ERROR: $e');
+    }
 
     // Fetch Allergies sub-collection (saved by optional_info_page)
     try {

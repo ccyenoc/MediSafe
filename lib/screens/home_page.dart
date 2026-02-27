@@ -12,6 +12,7 @@ import '../widgets/header_actions.dart';
 import '../services/gemini_service.dart';
 import '../services/location_service.dart';
 import '../services/firestore_service.dart';
+import '../models/user_profile_model.dart';
 import 'chatbot_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -39,7 +40,19 @@ class _HomePageState extends State<HomePage> {
     
     // 1. Initialize teammate's new services
     _floatingGeminiService = GeminiService();
-    _floatingGeminiService.startChatSession();
+    
+    // Fetch user profile and start chat session with context
+    FirestoreService().getUserProfileOnce().then((data) {
+      if (data != null && mounted) {
+        final profile = UserProfileModel.fromFirestore(data);
+        _floatingGeminiService.startChatSession(profile: profile);
+      } else {
+        _floatingGeminiService.startChatSession();
+      }
+    }).catchError((_) {
+      _floatingGeminiService.startChatSession();
+    });
+
     LocationService().captureAndSaveLocation();
 
     // 2. Initialize your timer
