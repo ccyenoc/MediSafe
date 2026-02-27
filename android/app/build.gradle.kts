@@ -1,4 +1,8 @@
-val mapsApiKey = project.findProperty("MAPS_API")?.toString() ?: ""
+import java.util.Properties
+
+val secretsFile = rootProject.file("secrets.properties")
+val secrets = Properties().apply { if (secretsFile.exists()) load(secretsFile.inputStream()) }
+val mapsApiKey = secrets.getProperty("MAPS_API", "")
 
 plugins {
     id("com.android.application")
@@ -27,8 +31,7 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["MAPS_API_KEY"] =
-        project.findProperty("MAPS_API")?.toString() ?: ""
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 }
 

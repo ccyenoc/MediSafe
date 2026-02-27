@@ -44,7 +44,7 @@
         <!-- Google Maps API key -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAfLVr6gFQFP9saOhO2Tx9t8j7L8k1w6c0" />
+            android:value="${MAPS_API_KEY}" />
 
         <!-- Receivers for flutter_local_notifications to restore alarms after reboot -->
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
