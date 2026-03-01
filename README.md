@@ -56,6 +56,7 @@ flutter pub get
 Create a .env file in the project root:
 ```bash
 GEMINI_API_KEY=your_api_key
+GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY_HERE  
 ```  
 Make sure Firebase is configured:  
 google-services.json (Android)  
