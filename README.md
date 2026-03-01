@@ -236,9 +236,9 @@ Handling authentication securely is critical when dealing with personal health d
 
 | Name | Contribution |
 |------|--------------|
-| **Brayden Chong Jie Rui** | Led overall project planning and system architecture. Designed and implemented backend logic using **Firebase (Authentication & Firestore)**, integrated **Google Gemini 2.5 Flash** for AI reasoning and chat, implemented the **OCR-to-AI pipeline** using **Google ML Kit**, and handled personalization logic based on user health profiles. |
-| **Chin Yiu Ern** | Developed core frontend features using **Flutter (Dart)**, including the Home, Scan Medicine, and Results pages. Focused on user flow design, camera integration, and clear presentation of AI-generated medicine information. |
-| **Lim Wan Yee** | Contributed to frontend development with **Flutter**, assisted in building the Schedule and Chatbot pages, refined UI components, and ensured consistent layout, usability, and responsiveness across the app. |
+| **Brayden Chong Jie Rui** | Led overall project planning and system architecture. Designed and implemented backend logic using Firebase (Authentication & Firestore), integrated Google Gemini 2.5 Flash for AI reasoning and chat and implemented the OCR-to-AI pipeline using Google ML Kit and handled personalization logic based on user health profiles. 
+| **Chin Yiu Ern** | Developed core frontend features using Flutter (Dart), including the Home, Scan Medicine, and Results pages. Focused on user flow design, camera integration, and clear presentation of AI-generated medicine information. Designed and implemented backend logic using Firebase (Authentication & Firestore)|
+| **Lim Wan Yee** | Contributed to frontend development with Flutter, assisted in building the Schedule and Chatbot pages, refined UI components, implemented the LocationService** with Geolocator, Geocoding, and Google Maps SDK, built the Near Me page for locating nearby pharmacies, clinics, and hospitals, and ensured consistent layout, usability, and responsiveness across the app. |
 | **One Yean** | Performed quality assurance and testing across Android devices, validated OCR accuracy, AI responses, and reminder flows, identified edge cases, and provided feedback to improve stability and overall user experience. |
 
 <div align="center">
