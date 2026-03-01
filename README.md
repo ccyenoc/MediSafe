@@ -43,15 +43,22 @@ Clone the repository:
 ```bash
 git clone <repository-url>
 cd MediSafe
-  
+```
+
 Install dependencies:
+```bash
 flutter pub get
+```
 
 Create a .env file in the project root:
+```bash
 GEMINI_API_KEY=your_api_key
+```
 
 Run the app on a physical Android device:  
+```bash
 flutter run
+```
 
 ---
 
