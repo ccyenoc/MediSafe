@@ -31,6 +31,36 @@ By combining on-device OCR with cloud-based AI reasoning, MediSafe helps users u
 
 MediSafe is built with a privacy-conscious, modular architecture optimized for mobile performance and safety-critical use cases.
 
+## 🚀 Quick Start
+
+### Prerequisites
+- Flutter SDK (latest stable)
+- Android Studio or Android SDK
+- Physical Android device (camera required)
+- Active internet connection
+  
+Clone the repository:
+```bash
+git clone <repository-url>
+cd MediSafe
+  
+Install dependencies:
+flutter pub get
+
+Create a .env file in the project root:
+GEMINI_API_KEY=your_api_key
+
+Run the app on a physical Android device:  
+flutter run
+
+---
+
+### 1. Clone Repository
+
+```bash
+git clone <repository-url>
+cd MediSafe
+
 ### 1. Technology Stack
 
 | Layer | Technology |
