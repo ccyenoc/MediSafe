@@ -55,12 +55,6 @@ flutter run
 
 ---
 
-### 1. Clone Repository
-
-```bash
-git clone <repository-url>
-cd MediSafe
-
 ### 1. Technology Stack
 
 | Layer | Technology |
